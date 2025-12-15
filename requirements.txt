@@ -1,0 +1,14 @@
+# Core GUI
+PySide6>=6.6
+
+# Audio I/O
+sounddevice>=0.4.6
+numpy>=1.23
+
+# Networking
+requests>=2.31
+
+# Optional but recommended
+# Improves SSL / HTTP behavior on some systems
+certifi>=2023.7.22
+
