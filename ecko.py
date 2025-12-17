@@ -777,7 +777,7 @@ class App(QWidget):
                 QTimer.singleShot(30, type_step)  # 30 ms per character
             else:
                 self.text_box.moveCursor(QTextCursor.End)
-                QTimer.singleShot(800, self.on_send)  # send after typing done
+                QTimer.singleShot(50, self.on_send)  # send after typing done
 
         type_step()
 
