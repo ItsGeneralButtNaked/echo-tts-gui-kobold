@@ -59,10 +59,10 @@ class PCMPlayer:
 
         self.auto_gain = False
         self.agc_mode = "rms"  # or "peak"
-        self.agc_target_rms = 0.05
+        self.agc_target_rms = 0.1
         self.agc_gain = 1.0
         self.agc_max_gain = 1.6
-        self.agc_smoothing = 0.015
+        self.agc_smoothing = 0.1
 
     def play(self, pcm_bytes, gain=1.5, limit=0.95):
         audio = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32) / 32768.0
