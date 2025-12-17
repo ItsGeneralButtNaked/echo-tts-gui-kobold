@@ -360,27 +360,17 @@ class App(QWidget):
     def toggle_mic(self, enabled):
         self.mic_enabled = enabled
 
-        # Force PTT to follow mic state
-        if self.ptt_btn.isChecked() != enabled:
-            self.ptt_btn.blockSignals(True)
-            self.ptt_btn.setChecked(enabled)
-            self.ptt_btn.blockSignals(False)
-
-        self.ptt_enabled = enabled
-
+        # Stop recording if mic is disabled
         if not enabled:
             self.ptt_active = False
             self.stt.stop()
-            return
-
-    # Mic ON always requires PTT (temporary behavior)
-    # Actual recording starts only when Alt is held
+            self.ptt_btn.setChecked(False)
 
 
             
     def toggle_ptt(self, enabled):
-        # PTT is temporarily forced by Mic toggle
-        self.ptt_enabled = self.mic_enabled
+        # PTT button is now purely indicator; do not change anything manually
+        pass
 
 
         
@@ -398,19 +388,20 @@ class App(QWidget):
             return True
 
         # ---------- PTT HANDLING ----------
-        if self.mic_enabled and self.ptt_enabled:
-            if event.type() == QEvent.KeyPress:
-                if event.key() == PTT_KEY and not self.ptt_active:
-                    self.ptt_active = True
-                    self.stt.start()
+        if self.mic_enabled:
+            if event.type() == QEvent.KeyPress and event.key() == PTT_KEY and not self.ptt_active:
+                self.ptt_active = True
+                self.ptt_btn.setChecked(True)
+                self.stt.start()
 
-            elif event.type() == QEvent.KeyRelease:
-                if event.key() == PTT_KEY and self.ptt_active:
-                    self.ptt_active = False
-                    self.stt.stop()
-                    self.finish_stt()
+            elif event.type() == QEvent.KeyRelease and event.key() == PTT_KEY and self.ptt_active:
+                self.ptt_active = False
+                self.ptt_btn.setChecked(False)
+                self.stt.stop()
+                self.finish_stt()
 
         return super().eventFilter(obj, event)
+
 
 
 
@@ -533,10 +524,10 @@ class App(QWidget):
 
         self.ptt_btn = QPushButton("PTT")
         self.ptt_btn.setCheckable(True)
+        self.ptt_btn.setEnabled(False)  # disable user clicks
         bottom.addWidget(self.ptt_btn)
         
         self.mic_btn.toggled.connect(self.toggle_mic)
-        self.ptt_btn.toggled.connect(self.toggle_ptt)
 
         bottom.addStretch(1)
 
