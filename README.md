@@ -1,57 +1,65 @@
-# ECKO
+ECKO
 
 ECKO is a lightweight desktop interface for:
 
-* **Echo-TTS** streaming speech synthesis
-* **KoboldCPP** text generation
+Echo-TTS streaming speech synthesis
 
-## Why did you make this?
+KoboldCPP text generation
+
+Why did you make this?
 
 I've been experimenting with LLMs and TTS. Echo got released and there wasn't anything similar available. Other solutions I tried only connect to the WAV output, which on my hardware means a long wait for audio. They also include features I don’t need for basic turn-based TTS interaction.
 
 So I built my own! As shown in the demo videos, it is blazing fast even on older hardware.
 
-## Features
+Features
 
-* Live streaming TTS playback
-* Per-character presets (system prompt, voice, volume, AGC, KV scaling)
-* RMS or Peak Auto Gain Control
-* Real-time waveform visualization
-* Persistent settings
+Live streaming TTS playback
 
----
+Per-character presets (system prompt, voice, volume, AGC, KV scaling)
 
-## Ecko v0.3 Update
+RMS or Peak Auto Gain Control
 
-* **Context-aware Auto-Continue**: UI activated with 3 preset strengths.
-* **Switchable Wave Display**: Choose waveform style and adjust amplitude with slider.
-* **Default Characters Added**: Preloaded character presets for faster setup.
-* **UI Cleanup**: Unused buttons hidden for now.
-* **Work-in-Progress**: Interrupt function is present but currently disabled due to bugs.
+Real-time waveform visualization
 
----
+Persistent settings
 
-## Requirements
+Ecko v0.3 Update
 
-* **Python 3.11**
-* A running **Echo-TTS-API** server  
-  [https://github.com/KevinAHM/echo-tts-api](https://github.com/KevinAHM/echo-tts-api)
-* A running **KoboldCPP** server  
-  [https://github.com/LostRuins/koboldcpp](https://github.com/LostRuins/koboldcpp)
+Context-aware Auto-Continue: UI button with 3 preset strengths.
 
----
+Switchable Wave Display: Choose waveform style and adjust amplitude with slider.
 
-## Server Setup
+Default Characters Added: Preloaded character presets for faster setup.
 
-This application requires **two local servers** to be running before launch:
+UI Cleanup: Unused buttons hidden for now.
 
-* **Echo-TTS-API** (streaming text-to-speech)
-* **KoboldCPP** (LLM text generation)
+Work-in-Progress: Interrupt function is present but currently disabled due to bugs.
+
+Requirements
+
+Python 3.11
+
+A running Echo-TTS-API server
+https://github.com/KevinAHM/echo-tts-api
+
+A running KoboldCPP server
+https://github.com/LostRuins/koboldcpp
+
+Server Setup
+
+This application requires two local servers to be running before launch:
+
+Echo-TTS-API (streaming text-to-speech)
+
+KoboldCPP (LLM text generation)
 
 The GUI connects to these services using the following default endpoints:
 
 TTS_BASE    = "http://localhost:8000"
 KOBOLD_BASE = "http://localhost:5001"
+
+
 You can change these in the script if your servers run on different hosts or ports.
 
 Installation
@@ -63,6 +71,7 @@ cd ecko
 Option A — Conda
 conda create -n ecko python=3.11
 conda activate ecko
+
 Option B — Standard Python venv
 python3.11 -m venv venv
 source venv/bin/activate
@@ -75,21 +84,26 @@ pip install -r requirements.txt
 python ecko.py
 
 Linux Notes
+
 You may need PortAudio and XCB cursor support:
 
 sudo apt install portaudio19-dev libxcb-cursor0
+
 Extra Waffle 🍩
+
 This isn’t meant to be a deep or comprehensive tool — it’s just a quick way to play around with the amazing Echo-TTS.
 
 https://github.com/jordandare/echo-tts
 
 Platform Support
+
 Linux: Tested and supported
 
 Windows: ❗ Testing coming soon
 Windows support code may exist, but the application has not yet been tested on Windows.
 
 Release History
+
 v0.3 — Context-aware auto continue, switchable wave display with amplitude slider, default characters added, UI cleanup, WIP interrupt function.
 
 v0.2 — Speech-to-Text & Push-to-Talk support, live transcription, mic toggle & PTT, temporary CPU STT mapping.
