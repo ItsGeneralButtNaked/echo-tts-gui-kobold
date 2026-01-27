@@ -103,6 +103,12 @@ python ecko.py
 
 ---
 
+## Usage Notes
+
+Open Mic hasn't been implemented yet so when Mic button is enabled you have to use "left ALT" to activate Push To Talk.
+
+---
+
 ## Linux Notes
 
 You may need **PortAudio** and XCB cursor support:
