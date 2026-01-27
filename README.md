@@ -50,7 +50,6 @@ This application requires **two local servers** to be running before launch:
 
 The GUI connects to these services using the following default endpoints:
 
-```python
 TTS_BASE    = "http://localhost:8000"
 KOBOLD_BASE = "http://localhost:5001"
 You can change these in the script if your servers run on different hosts or ports.
@@ -59,6 +58,7 @@ Installation
 1️⃣ Clone the repository
 git clone https://github.com/ItsGeneralButtNaked/ecko
 cd ecko
+
 2️⃣ Create a virtual environment
 Option A — Conda
 conda create -n ecko python=3.11
@@ -66,11 +66,14 @@ conda activate ecko
 Option B — Standard Python venv
 python3.11 -m venv venv
 source venv/bin/activate
+
 3️⃣ Install dependencies
 pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
+
 4️⃣ Run the application
 python ecko.py
+
 Linux Notes
 You may need PortAudio and XCB cursor support:
 
