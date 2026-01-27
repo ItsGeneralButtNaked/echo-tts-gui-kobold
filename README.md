@@ -1,111 +1,146 @@
-ECKO
+# ECKO
 
 ECKO is a lightweight desktop interface for:
 
-Echo-TTS streaming speech synthesis
+* **Echo-TTS** streaming speech synthesis
+* **KoboldCPP** text generation
 
-KoboldCPP text generation
+---
 
-Why did you make this?
+## Why did you make this?
 
-I've been experimenting with LLMs and TTS. Echo got released and there wasn't anything similar available. Other solutions I tried only connect to the WAV output, which on my hardware means a long wait for audio. They also include features I don’t need for basic turn-based TTS interaction.
+Ive been messing around with LLMs and TTS for a short while. Echo got released and there wasn't anything else similar available. All the other solutions I tried only connect to the wav output, which on my level of hardware means a grim wait for the audio to generate. Additionally, they come with so many other features that are not required for basic turn-based TTS interaction.
 
-So I built my own! As shown in the demo videos, it is blazing fast even on older hardware.
+So I just built my own! As you can see in the demo videos it is blazing fast without any performance tweaks even on archaic hardware.
 
-Features
+---
 
-Live streaming TTS playback
+## Features
 
-Per-character presets (system prompt, voice, volume, AGC, KV scaling)
+* Live streaming TTS playback
+* Per-character presets (system prompt, voice, volume, AGC, KV scaling)
+* RMS or Peak Auto Gain Control
+* Real-time waveform visualization
+* Persistent settings
 
-RMS or Peak Auto Gain Control
+---
 
-Real-time waveform visualization
+## Ecko v0.3 Update
 
-Persistent settings
+* **Context-aware Auto-Continue**: UI button with 3 preset strengths.
+* **Switchable Wave Display**: Choose waveform style and adjust amplitude with slider.
+* **Default Characters Added**: Preloaded character presets for faster setup.
+* **UI Cleanup**: Unused buttons hidden for now.
+* **Work-in-Progress**: Interrupt function is present but currently disabled due to bugs.
 
-Ecko v0.3 Update
+---
 
-Context-aware Auto-Continue: UI button with 3 preset strengths.
+## Requirements
 
-Switchable Wave Display: Choose waveform style and adjust amplitude with slider.
+* **Python 3.11**
+* A running **Echo-TTS-API** server  
+  [https://github.com/KevinAHM/echo-tts-api](https://github.com/KevinAHM/echo-tts-api)
+* A running **KoboldCPP** server  
+  [https://github.com/LostRuins/koboldcpp](https://github.com/LostRuins/koboldcpp)
 
-Default Characters Added: Preloaded character presets for faster setup.
+---
 
-UI Cleanup: Unused buttons hidden for now.
+## Server Setup
 
-Work-in-Progress: Interrupt function is present but currently disabled due to bugs.
+This application requires **two local servers** to be running before launch:
 
-Requirements
-
-Python 3.11
-
-A running Echo-TTS-API server
-https://github.com/KevinAHM/echo-tts-api
-
-A running KoboldCPP server
-https://github.com/LostRuins/koboldcpp
-
-Server Setup
-
-This application requires two local servers to be running before launch:
-
-Echo-TTS-API (streaming text-to-speech)
-
-KoboldCPP (LLM text generation)
+* **Echo-TTS-API** (streaming text-to-speech)
+* **KoboldCPP** (LLM text generation)
 
 The GUI connects to these services using the following default endpoints:
 
+```python
 TTS_BASE    = "http://localhost:8000"
 KOBOLD_BASE = "http://localhost:5001"
-
+```
 
 You can change these in the script if your servers run on different hosts or ports.
 
-Installation
-1️⃣ Clone the repository
+---
+
+## Installation
+
+### 1️⃣ Clone the repository
+
+```bash
 git clone https://github.com/ItsGeneralButtNaked/ecko
 cd ecko
+```
 
-2️⃣ Create a virtual environment
-Option A — Conda
+### 2️⃣ Create a virtual environment
+
+#### Option A — Conda
+
+```bash
 conda create -n ecko python=3.11
 conda activate ecko
+```
 
-Option B — Standard Python venv
+#### Option B — Standard Python venv
+
+```bash
 python3.11 -m venv venv
 source venv/bin/activate
+```
 
-3️⃣ Install dependencies
+### 3️⃣ Install dependencies
+
+```bash
 pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
+```
 
-4️⃣ Run the application
+### 4️⃣ Run the application
+
+```bash
 python ecko.py
+```
 
-Linux Notes
+---
 
-You may need PortAudio and XCB cursor support:
+## Linux Notes
 
+You may need **PortAudio** and XCB cursor support:
+
+```bash
 sudo apt install portaudio19-dev libxcb-cursor0
+```
 
-Extra Waffle 🍩
+---
 
-This isn’t meant to be a deep or comprehensive tool — it’s just a quick way to play around with the amazing Echo-TTS.
+## Extra Waffle 🍩
 
-https://github.com/jordandare/echo-tts
+This isn’t meant to be a deep or comprehensive tool — it’s just a quick and easy way to play around with the amazing **Echo-TTS**.
 
-Platform Support
+[https://github.com/jordandare/echo-tts](https://github.com/jordandare/echo-tts)
 
-Linux: Tested and supported
+---
 
-Windows: ❗ Testing coming soon
-Windows support code may exist, but the application has not yet been tested on Windows.
+## Features / Updates
 
-Release History
+1. I’m not fully happy with the Auto Gain yet — it definitely needs some tweaks, but it’s useful to have.
+2. KV scale could use more exposed values (possibly an **Advanced** tab).
+3. General UI cleanup.
 
-v0.3 — Context-aware auto continue, switchable wave display with amplitude slider, default characters added, UI cleanup, WIP interrupt function.
+---
 
-v0.2 — Speech-to-Text & Push-to-Talk support, live transcription, mic toggle & PTT, temporary CPU STT mapping.
+## Platform Support
 
-v0.1 — Initial release with live TTS playback, per-character presets, basic UI.
+* **Linux:** Tested and supported
+* **Windows:** ❗ *Testing coming soon*
+
+Windows support code may exist, but the application has **not yet been tested on Windows**.
+Proper validation and cleanup will be done once Windows testing is completed.
+
+---
+
+## Release History
+
+* **v0.3** — Context-aware auto continue, switchable wave display with amplitude slider, default characters added, UI cleanup, WIP interrupt function.
+* **v0.2** — Speech-to-Text & Push-to-Talk support, live transcription, mic toggle & PTT, temporary CPU STT mapping.
+* **v0.1** — Initial release with live TTS playback, per-cha
