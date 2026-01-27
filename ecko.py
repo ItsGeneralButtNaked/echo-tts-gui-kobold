@@ -1606,7 +1606,7 @@ class App(QWidget):
             print(f"[ON_SEND] No text, ignoring")
             return
 
-<<<<<<< HEAD
+
         QTimer.singleShot(0, self.text_box.clear)
         threading.Thread(target=self.run_pipeline, args=(text,), daemon=True).start()
 
@@ -1633,7 +1633,7 @@ class App(QWidget):
                 QTimer.singleShot(50, self.on_send)  # send after typing done
 
         type_step()
-=======
+
         self.text_box.clear()
         
         # Reset interruption flags for new pipeline
@@ -1642,7 +1642,7 @@ class App(QWidget):
         
         # Stop auto-continue timer while processing
         self.auto_continue_timer.stop()
->>>>>>> 2471164 (Add default characters; update ecko.py with auto-continue presets and UI cleanup)
+
 
         def safe_pipeline():
             try:
