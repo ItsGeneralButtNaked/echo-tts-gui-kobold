@@ -1606,34 +1606,6 @@ class App(QWidget):
             print(f"[ON_SEND] No text, ignoring")
             return
 
-
-        QTimer.singleShot(0, self.text_box.clear)
-        threading.Thread(target=self.run_pipeline, args=(text,), daemon=True).start()
-
-
-    def finish_stt(self):
-        text = self.stt.transcribe().strip()
-        if not text:
-            return
-
-        self.text_box.setLineWrapMode(QTextEdit.NoWrap)
-
-        # Split text into characters for gradual typing
-        self._stt_text = text
-        self._stt_index = 0
-
-        def type_step():
-            if self._stt_index < len(self._stt_text):
-                self.text_box.moveCursor(QTextCursor.End)
-                self.text_box.insertPlainText(self._stt_text[self._stt_index])
-                self._stt_index += 1
-                QTimer.singleShot(30, type_step)  # 30 ms per character
-            else:
-                self.text_box.moveCursor(QTextCursor.End)
-                QTimer.singleShot(50, self.on_send)  # send after typing done
-
-        type_step()
-
         self.text_box.clear()
         
         # Reset interruption flags for new pipeline
@@ -1642,7 +1614,6 @@ class App(QWidget):
         
         # Stop auto-continue timer while processing
         self.auto_continue_timer.stop()
-
 
         def safe_pipeline():
             try:
