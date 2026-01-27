@@ -1,2 +1,10 @@
-characters/
+# Ignore everything in characters
+characters/*
+
+# But allow the default folder
+!characters/Default/
+!characters/Default/**
+
+# Ignore this file
 eckotest.py
+

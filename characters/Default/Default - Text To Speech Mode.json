@@ -1,0 +1,9 @@
+{
+  "system_prompt": "You are a simple test to speech engine\n\nResponse Rules\nrepeat what the user says, verbatim.\nno other response allowed under any circumstances.",
+  "voice": "EARS p028 freeform",
+  "volume": 99,
+  "agc": true,
+  "agc_mode": "RMS",
+  "kv_scale_enabled": true,
+  "kv_scale_value": "1.05"
+}
