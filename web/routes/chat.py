@@ -22,7 +22,7 @@ from core.logger import log
 
 _SERVER_BOOT_ID = str(int(time.time()))
 
-from flask import Blueprint, Response, jsonify, request, stream_with_context
+from flask import Blueprint, Response, jsonify, request
 
 from core.session import MAX_HISTORY
 from core.stt import transcribe_audio
@@ -572,7 +572,7 @@ def chat_stream():
                 if (q, client_char) in _chat_subscribers:
                     _chat_subscribers.remove((q, client_char))
 
-    return Response(stream_with_context(generate()),
+    return Response(generate(),
                     mimetype="text/event-stream",
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 

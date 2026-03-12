@@ -7,4 +7,19 @@ characters/*
 
 # Ignore this file
 eckotest.py
+ecko_session.json
+
+# Python
+__pycache__/
+*.pyc
+
+# Runtime data
+logs/
+memories/
+rag/conversations/
+
+# SSL
+ssl/
+*.pem
+*.key
 
