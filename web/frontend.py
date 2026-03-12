@@ -524,10 +524,10 @@ FRONTEND_HTML = r"""<!DOCTYPE html>
     <div class="setting-row" style="align-items:center;gap:8px;flex-wrap:wrap">
       <label style="white-space:nowrap">FX CHANCE</label>
       <input type="range" id="s-fx-chance" min="0" max="100" step="5" value="15"
-             style="flex:1;min-width:80px;accent-color:var(--accent)"
+             style="flex:1;min-width:80px;accent-color:var(--green)"
              oninput="document.getElementById('s-fx-chance-val').textContent=this.value+'%';_saveFxChance()"
              title="Probability (0–100%) that the next initiative tick fires a visual effect instead of a message">
-      <span id="s-fx-chance-val" style="font-size:10px;color:var(--accent);min-width:30px;text-align:right">15%</span>
+      <span id="s-fx-chance-val" style="font-size:10px;color:var(--green);min-width:30px;text-align:right">15%</span>
       <button class="btn" onclick="_testFxNow()" title="Fire a random visual effect right now for testing" style="white-space:nowrap;padding:5px 10px;font-size:10px">TEST FX</button>
     </div>
 
@@ -537,7 +537,7 @@ FRONTEND_HTML = r"""<!DOCTYPE html>
         <label style="letter-spacing:2px;white-space:nowrap">SLEEP TIMER</label>
         <button class="btn" id="s-sleep-timer-btn" onclick="_toggleSleepTimer()" style="flex-shrink:0">OFF</button>
         <span style="font-size:10px;color:var(--text-dim);flex:1">quiet hours</span>
-        <span id="s-sleep-active-badge" style="display:none;font-size:9px;color:var(--accent);font-family:var(--font-mono);letter-spacing:1px">● SLEEPING</span>
+        <span id="s-sleep-active-badge" style="display:none;font-size:9px;color:var(--green);font-family:var(--font-mono);letter-spacing:1px">● SLEEPING</span>
       </div>
       <div style="display:flex;align-items:center;gap:8px;padding-left:2px;width:100%">
         <span style="font-size:10px;color:var(--text-dim)">FROM</span>
@@ -886,9 +886,16 @@ FRONTEND_HTML = r"""<!DOCTYPE html>
         <button class="btn on" id="av-ac-indicator" onclick="toggleAC()" title="Auto-continue — click to toggle">AC: ON</button>
         <button class="btn" id="av-init-indicator" onclick="toggleInitiative()" title="Initiative — click to toggle">◈ INIT</button>
         <button class="btn" id="avatar-mic-btn" onclick="toggleOpenMic()" title="Open-mic VAD mode">VAD</button>
-        <button class="btn" id="avatar-mic-mute-btn" onclick="toggleMicMute()" title="Mute/unmute microphone" style="display:none">🎙 MUTE</button>
+        <button class="btn" id="avatar-mic-mute-btn" onclick="toggleMicMute()" title="Mute/unmute microphone" disabled style="opacity:0.35">🎙 MUTE</button>
         <button class="btn" onclick="stopAudio()">STOP</button>
         <button class="btn" id="avatar-text-toggle-btn" onclick="toggleAvatarTextInput()" title="Toggle text input">TEXT</button>
+        <div style="display:flex;align-items:center;gap:3px" title="Subtitle speed">
+          <span style="font-size:9px;color:var(--text-dim);font-family:var(--font-mono)">CC</span>
+          <input type="range" id="av-sub-speed-slider" min="4" max="30" step="1" value="11"
+                 style="width:52px;accent-color:var(--green);cursor:pointer"
+                 oninput="_setSubSpeed(this.value)" title="Subtitle speed (chars/sec)">
+          <span id="av-sub-speed-val" style="font-size:9px;color:var(--green);font-family:var(--font-mono);min-width:16px">11</span>
+        </div>
       </div>
     </div>
   </div>
@@ -927,8 +934,15 @@ FRONTEND_HTML = r"""<!DOCTYPE html>
       <button class="btn on" id="ac-indicator" onclick="toggleAC()" title="Auto-continue — click to toggle">AC: ON</button>
       <button class="btn" id="init-indicator" onclick="toggleInitiative()" title="Initiative — click to toggle">◈ INIT</button>
       <button class="btn" id="open-mic-btn" onclick="toggleOpenMic()" title="Open-mic VAD mode">VAD</button>
-      <button class="btn" id="mic-mute-btn" onclick="toggleMicMute()" title="Mute/unmute microphone" style="display:none">🎙 MUTE</button>
+      <button class="btn" id="mic-mute-btn" onclick="toggleMicMute()" title="Mute/unmute microphone" disabled style="opacity:0.35">🎙 MUTE</button>
       <button class="btn" onclick="stopAudio()">STOP</button>
+      <div style="display:flex;align-items:center;gap:4px;margin-left:auto" title="Subtitle speed">
+        <span style="font-size:9px;color:var(--text-dim);font-family:var(--font-mono)">CC</span>
+        <input type="range" id="sub-speed-slider" min="4" max="30" step="1" value="11"
+               style="width:64px;accent-color:var(--green);cursor:pointer"
+               oninput="_setSubSpeed(this.value)" title="Subtitle speed (chars/sec)">
+        <span id="sub-speed-val" style="font-size:9px;color:var(--green);font-family:var(--font-mono);min-width:16px">11</span>
+      </div>
     </div>
   </div>
 
@@ -1533,10 +1547,10 @@ function setOpenMicState(s){
   const[text,cls]=states[s]||states.off;
   btn.textContent=text; btn.className=cls;
   ptt.style.display=s==='off'?'':'none';
-  // Show mute button only when VAD is active
+  // Mute button always visible — disabled when VAD is off
   const vadActive=s!=='off';
-  if(muteBtn) muteBtn.style.display=vadActive?'':'none';
-  if(avMuteBtn) avMuteBtn.style.display=vadActive?'':'none';
+  if(muteBtn) { muteBtn.style.display=''; muteBtn.disabled=!vadActive; muteBtn.style.opacity=vadActive?'':'0.35'; }
+  if(avMuteBtn) { avMuteBtn.style.display=''; avMuteBtn.disabled=!vadActive; avMuteBtn.style.opacity=vadActive?'':'0.35'; }
   _updateMuteBtnUI();
   // Mirror state on avatar overlay mic button (shorter labels to fit HUD)
   if(avBtn){
@@ -1550,8 +1564,8 @@ function _updateMuteBtnUI(){
   const avMuteBtn=document.getElementById('avatar-mic-mute-btn');
   const label=_micMuted?'🔇 UNMUTE':'🎙 MUTE';
   const cls='btn'+(_micMuted?' on':'');
-  if(muteBtn){muteBtn.textContent=label;muteBtn.className=cls;if(openMicState!=='off')muteBtn.style.display='';}
-  if(avMuteBtn){avMuteBtn.textContent=label;avMuteBtn.className=cls;if(openMicState!=='off')avMuteBtn.style.display='';}
+  if(muteBtn){muteBtn.textContent=label;muteBtn.className=cls;}
+  if(avMuteBtn){avMuteBtn.textContent=label;avMuteBtn.className=cls;}
 }
 function toggleMicMute(){
   _micMuted=!_micMuted;
@@ -2676,6 +2690,9 @@ async function loadState(){
       const sl = document.getElementById('s-fx-chance');
       if (sl) { sl.value = data.initiative_fx_chance; document.getElementById('s-fx-chance-val').textContent = data.initiative_fx_chance + '%'; }
     }
+
+    // Subtitle speed
+    if (data.sub_speed !== undefined) _setSubSpeed(data.sub_speed);
 
     // Sleep timer
     if (data.sleep_timer_enabled !== undefined) {
@@ -4962,9 +4979,26 @@ let _subCues     = [];       // [{word, startSec}]
 let _subShownIdx = -1;
 let _subGen      = 0;
 
-const _SUB_CHARS_PER_SEC = 11;
+// Subtitle speed — chars/sec. Higher = faster reveals. Saved to session.
+// Range 4 (very slow) → 20 (very fast). Default 11 matches average TTS pace.
+let _SUB_CHARS_PER_SEC = 11;
 const _SUB_LINGER_SEC    = 2.5;
 const _SUB_LINE_WORDS    = 5;   // words per subtitle line before rolling
+
+function _setSubSpeed(val) {
+  _SUB_CHARS_PER_SEC = Math.max(4, Math.min(30, Number(val)));
+  // Sync all speed sliders
+  for (const id of ['sub-speed-slider', 'av-sub-speed-slider']) {
+    const el = document.getElementById(id);
+    if (el) el.value = _SUB_CHARS_PER_SEC;
+  }
+  for (const id of ['sub-speed-val', 'av-sub-speed-val']) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = _SUB_CHARS_PER_SEC;
+  }
+  fetch('/settings', { method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ sub_speed: _SUB_CHARS_PER_SEC }) }).catch(() => {});
+}
 
 function toggleAvatarCC() {
   _subEnabled = !_subEnabled;

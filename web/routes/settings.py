@@ -144,6 +144,7 @@ def get_state():
         "main_wave_visible":   SESSION.tts.extra.get("main_wave_visible", True),
         "avatar_wave_visible": SESSION.tts.extra.get("avatar_wave_visible", True),
         "visual_fx_enabled":   SESSION.tts.extra.get("visual_fx_enabled", False),
+        "sub_speed":           SESSION.tts.extra.get("sub_speed", 11),
         "ui_hue":              SESSION.tts.extra.get("ui_hue", 140),
         "char_name":           os.path.splitext(os.path.basename(
                                    SESSION.tts.extra.get("loaded_char_path", "")
@@ -288,6 +289,9 @@ def update_settings():
               "visual_fx_enabled"):
         if k in data:
             SESSION.tts.extra[k] = data[k]
+
+    if "sub_speed" in data:
+        SESSION.tts.extra["sub_speed"] = max(4, min(30, int(data["sub_speed"])))
 
     # Auto-continue
     if "auto_continue_enabled" in data:
