@@ -1444,11 +1444,15 @@ async function playTTS(text,gen){
     }
     if(started&&!stopCurrentAudio&&_ttsGeneration===gen){
       // Wait until all scheduled sources have actually finished playing.
-      // Add outputLatency (device-reported) + 350ms tail to cover scheduling drift
-      // and short final chunks that would otherwise clip on slower audio stacks.
+      // Anchor to the last scheduled end time (schedTime) relative to *now*,
+      // not relative to when the stream started — if the final chunk was small
+      // and scheduled in the past, deadline would be near-zero and the tail
+      // would be skipped, clipping the last word.
       const latency=(audioCtx.outputLatency||audioCtx.baseLatency||0);
       const deadline=schedTime-audioCtx.currentTime+latency;
-      if(deadline>0) await new Promise(r=>setTimeout(r,deadline*1000+350));
+      // 500ms tail: covers scheduling drift, device buffer flush, and slow stacks.
+      // Only sleep if there's actually audio left to play.
+      if(deadline>-0.5) await new Promise(r=>setTimeout(r,Math.max(0,deadline*1000)+500));
       // Poll until Web Audio has drained all sources (catches any scheduling drift)
       while(_scheduledSources.length>0&&!stopCurrentAudio&&_ttsGeneration===gen){
         await new Promise(r=>setTimeout(r,80));
