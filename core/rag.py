@@ -92,6 +92,8 @@ class RAGMemory:
         self._embedder       = None
         self._index          = None   # FAISS index
         self._chunk_vecs     = None   # numpy array of chunk embeddings
+        # Device for sentence-transformers — False=CPU (safe default), True=CUDA
+        self.use_cuda        = False
 
         # Context-mode overrides — set by inject() from the active ContextMode.
         # These are the fallback defaults used when no mode is passed.
@@ -297,11 +299,9 @@ class RAGMemory:
         with _index_build_lock:
             try:
                 if self._embedder is None:
-                    print("[RAG] Loading sentence-transformers model (CPU)…")
-                    # Force CPU — all-MiniLM-L6-v2 is ~80 MB and fast enough on
-                    # CPU.  Letting it auto-select CUDA competes directly with the
-                    # main LLM/TTS model for VRAM and causes OOM on low-VRAM setups.
-                    self._embedder = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
+                    device = "cuda" if self.use_cuda else "cpu"
+                    print(f"[RAG] Loading sentence-transformers model ({device})…")
+                    self._embedder = SentenceTransformer("all-MiniLM-L6-v2", device=device)
                 vecs = self._embedder.encode(self.chunks, convert_to_numpy=True,
                                              show_progress_bar=False)
                 vecs = vecs / (np.linalg.norm(vecs, axis=1, keepdims=True) + 1e-9)

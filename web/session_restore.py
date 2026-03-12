@@ -75,6 +75,9 @@ def restore_session_state(
         print(f"[RESTORE] initiative started  mode={ini_mode!r}")
 
     # ── RAG extra files ───────────────────────────────────────────────────────
+    if "rag_cuda" in ex:
+        rag.use_cuda = bool(ex["rag_cuda"])
+        print(f"[RESTORE] rag.use_cuda = {rag.use_cuda}")
     rag_file = ex.get("rag_file", "")
     if rag_file:
         _rag_filenames = [f.strip() for f in rag_file.split(",") if f.strip()]

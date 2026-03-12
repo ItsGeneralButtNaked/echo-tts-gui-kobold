@@ -632,6 +632,8 @@ FRONTEND_HTML = r"""<!DOCTYPE html>
       <span id="rag-status" style="font-size:11px;color:#888;flex:1">No extra RAG loaded</span>
       <label style="min-width:auto;margin-right:4px;font-size:10px">SEMANTIC</label>
       <input type="checkbox" id="s-rag-semantic" style="accent-color:var(--green)">
+      <label style="min-width:auto;margin-left:10px;margin-right:4px;font-size:10px" title="Use CUDA for RAG embeddings — faster but uses VRAM">CUDA</label>
+      <input type="checkbox" id="s-rag-cuda" style="accent-color:var(--green)" onchange="_saveRagCuda()" title="Use CUDA for RAG sentence-transformer embeddings">
     </div>
 
     <hr class="section-divider">
@@ -2457,6 +2459,12 @@ async function clearRag(){
   document.getElementById('rag-status').textContent='No extra RAG loaded';
   document.getElementById('rag-status').style.color='#888';
 }
+function _saveRagCuda() {
+  const cuda = document.getElementById('s-rag-cuda').checked;
+  fetch('/settings', { method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ rag_cuda: cuda }) }).catch(() => {});
+}
+
 async function saveRag(){
   const name=document.getElementById('s-rag-save-name').value.trim();
   if(!name){alert('Enter a filename first.');return;}
@@ -2810,6 +2818,7 @@ async function loadState(){
       if(cn && cn.textContent) cn.textContent=window._currentCharName;
     }
     const semCb=document.getElementById('s-rag-semantic');if(semCb&&data.rag_semantic!==undefined)semCb.checked=!!data.rag_semantic;
+    const cudaCb=document.getElementById('s-rag-cuda');if(cudaCb&&data.rag_cuda!==undefined)cudaCb.checked=!!data.rag_cuda;
 
     // Memory status
     memoryEnabled=data.memory_enabled||false;

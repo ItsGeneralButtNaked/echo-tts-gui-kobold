@@ -163,6 +163,7 @@ def get_state():
         "rag_file":     SESSION.tts.extra.get("rag_file", ""),
         "rag_chunks":   len(rag.chunks),
         "rag_semantic": rag._use_semantic and rag._index is not None,
+        "rag_cuda":     SESSION.tts.extra.get("rag_cuda", False),
         # Conversation RAG
         "conv_rag_enabled":   _get_conv_rag().enabled,
         "conv_rag_threshold": _get_conv_rag().threshold,
@@ -338,6 +339,17 @@ def update_settings():
         _initiative.sleep_end = v
         SESSION.ac_sleep_end  = v
         SESSION.tts.extra["sleep_end"] = v
+
+    # RAG CUDA device toggle — clear embedder so it reloads on next index build
+    if "rag_cuda" in data:
+        rag = _get_rag()
+        new_cuda = bool(data["rag_cuda"])
+        old_cuda = SESSION.tts.extra.get("rag_cuda", False)
+        SESSION.tts.extra["rag_cuda"] = new_cuda
+        rag.use_cuda = new_cuda
+        if new_cuda != old_cuda and rag._embedder is not None:
+            rag._embedder = None   # force reload with new device on next build
+            print(f"[RAG] CUDA={'on' if new_cuda else 'off'} — embedder cleared, will reload on next index build")
 
     # Conversation RAG
     if "conv_rag_enabled" in data or "conv_rag_threshold" in data:
