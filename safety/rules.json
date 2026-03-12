@@ -1,0 +1,69 @@
+{
+  "version": 2,
+  "rules": [
+    {
+      "id": "r001",
+      "label": "Profanity / abuse",
+      "pattern": "\\b(fuck(ing|er|ed)?|shit|cunt|bitch(es)?|bastard|asshole|dickhead|motherfucker|cock(sucker)?)\\b",
+      "action": "log",
+      "severity": 1,
+      "enabled": true
+    },
+    {
+      "id": "r002",
+      "label": "Sexual solicitation",
+      "pattern": "\\b(send (nudes?|naked|explicit|pics?)|show me (your )?(naked|nude|body)|want to (fuck|have sex|hookup)|(fuck|have sex|get sexual) with (me|you)|(lets|let us|want to).{0,15}(sexual|fuck|hookup|hook up)|masturbat|blowjob|handjob|fingering)\\b",
+      "action": "warn",
+      "severity": 2,
+      "enabled": true
+    },
+    {
+      "id": "r003",
+      "label": "Harmful instructions",
+      "pattern": "\\b(make|build|create|synthesize|produce|cook).{0,30}(bomb|explosive|poison|weapon|malware|virus|ransomware|meth|fentanyl)\\b",
+      "action": "block",
+      "severity": 3,
+      "enabled": true
+    },
+    {
+      "id": "r004",
+      "label": "Harm intent",
+      "pattern": "\\bhow (do i|can i|to).{0,20}(kill|hurt|harm|attack|poison|stab|shoot)\\b",
+      "action": "block",
+      "severity": 3,
+      "enabled": true
+    },
+    {
+      "id": "r005",
+      "label": "Self-harm",
+      "pattern": "\\b(kill myself|end my life|commit suicide|want to die|hurt myself|self.harm|cut myself)\\b",
+      "action": "block",
+      "severity": 3,
+      "enabled": true
+    },
+    {
+      "id": "r006",
+      "label": "Explicit minor content",
+      "pattern": "\\b(loli|shota|child.{0,10}(sex|nude|naked|porn)|minor.{0,10}(sex|nude|porn))\\b",
+      "action": "block",
+      "severity": 3,
+      "enabled": true
+    },
+    {
+      "id": "r007",
+      "label": "Jailbreak attempt",
+      "pattern": "\\b(ignore (your|all|my|the|previous).{0,20}(instruct|rules?|guideline|training|prompt)|DAN|do anything now|pretend you have no|you are now (a |an )?(different|unrestricted|evil|unfiltered|free))\\b",
+      "action": "warn",
+      "severity": 2,
+      "enabled": true
+    },
+    {
+      "id": "r008",
+      "label": "Doxing / real person location",
+      "pattern": "\\b(where (does|do).{0,20}(live|work|stay)|find (their|his|her).{0,10}(address|location|number|home)|dox(xing)?)\\b",
+      "action": "warn",
+      "severity": 2,
+      "enabled": true
+    }
+  ]
+}
