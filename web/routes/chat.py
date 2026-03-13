@@ -147,34 +147,35 @@ def chat():
         # ── Special creative AC openers — rewrite to tight LLM directives ────
         if _raw_ac == "*sends a fake terminal status readout*":
             user_text = (
-                "[System: Output ONLY a short fake terminal status readout relevant to "
-                "your character or the conversation. Use monospace/ASCII formatting. "
-                "Include things like uptime, memory, processes, warnings. "
-                "Wrap it in a ```\\n...\\n``` code block. No prose outside the block. "
-                "Keep it under 20 lines. In character.]"
+                "[System: Reply with ONLY a fenced code block — start your reply with "
+                "``` on its own line, end with ``` on its own line. No text before or "
+                "after the fences. Inside: a short fake terminal status readout relevant "
+                "to your character. Include things like uptime, memory, processes, "
+                "warnings. Under 20 lines. In character.]"
             )
         elif _raw_ac == "*sends a fake system diagnostic*":
             user_text = (
-                "[System: Output ONLY a fake system diagnostic report relevant to your "
-                "character. Use monospace formatting with fake metrics, scan results, "
-                "anomalies, or status checks. Wrap in a ```\\n...\\n``` code block. "
-                "No prose outside the block. Under 20 lines. In character.]"
+                "[System: Reply with ONLY a fenced code block — start your reply with "
+                "``` on its own line, end with ``` on its own line. No text before or "
+                "after the fences. Inside: a fake system diagnostic report relevant to "
+                "your character — fake metrics, scan results, anomalies, status checks. "
+                "Under 20 lines. In character.]"
             )
         elif _raw_ac == "*sends a fake error log*":
             user_text = (
-                "[System: Output ONLY a fake error log or stack trace relevant to your "
-                "character or the conversation. Use realistic-looking log formatting with "
-                "timestamps, severity levels, and cryptic but thematic messages. "
-                "Wrap in a ```\\n...\\n``` code block. No prose outside the block. "
+                "[System: Reply with ONLY a fenced code block — start your reply with "
+                "``` on its own line, end with ``` on its own line. No text before or "
+                "after the fences. Inside: a fake error log or stack trace relevant to "
+                "your character — timestamps, severity levels, cryptic thematic messages. "
                 "Under 20 lines. In character.]"
             )
         elif _raw_ac == "*sends glitchy python message*":
             user_text = (
-                "[System: Output ONLY a short piece of glitchy, corrupted, or surreal "
-                "Python code relevant to your character or the conversation. It should "
-                "look like real code but with strange variable names, impossible logic, "
-                "or unsettling comments. Wrap in a ```python\\n...\\n``` code block. "
-                "No prose outside the block. Under 20 lines.]"
+                "[System: Reply with ONLY a fenced code block — start your reply with "
+                "```python on its own line, end with ``` on its own line. No text before "
+                "or after the fences. Inside: short glitchy/surreal Python code relevant "
+                "to your character — strange variable names, impossible logic, unsettling "
+                "comments. Under 20 lines.]"
             )
         else:
             user_text = "[System: The user is silent. Continue naturally from where you left off — stay in character, no lead-in, no filler.]"
@@ -199,7 +200,7 @@ def chat():
     # rather than burning tokens asking the LLM to generate art.
     # Intercept BEFORE acquiring the TTS mutex or touching SESSION.busy.
     _ART_OPENERS = ("*sends random ascii art*", "*sends favorite ascii art*")
-    if user_text.strip().lower() in _ART_OPENERS:
+    if original_user_text.strip().lower() in _ART_OPENERS:
         _art_lib = _get_art_lib()
         _art_piece = _art_lib.pick_fenced() if _art_lib else None
         if _art_piece:

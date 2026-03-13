@@ -4484,8 +4484,10 @@ function _avCheckBubbleForCode(text) {
 }
 
 function _stripCodeForTTS(text) {
-  // Remove fenced code blocks entirely
+  // Remove closed fenced code blocks entirely
   let out = text.replace(/```[\s\S]*?```/g, ' ');
+  // Remove any remaining unclosed fence (``` to end of string)
+  out = out.replace(/```[\s\S]*$/g, ' ');
   // Remove inline code
   out = out.replace(/`[^`]+`/g, ' ');
   // Remove ANSI escape sequences
