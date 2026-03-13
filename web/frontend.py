@@ -2058,7 +2058,11 @@ function onTTSProviderChange(skipDefaults){
   document.getElementById('tts-field-api-key').style.display=p.needs_api_key?'flex':'none';
   // Show manual voice ID input only for ElevenLabs
   const vidRow=document.getElementById('tts-field-voice-id');
-  if(vidRow) vidRow.style.display=(pid==='elevenlabs')?'flex':'none';
+  if(vidRow){
+    vidRow.style.display=(pid==='elevenlabs'||pid==='hume')?'flex':'none';
+    const vidInput=document.getElementById('s-voice-id');
+    if(vidInput) vidInput.placeholder=pid==='hume'?'paste Hume voice ID':'paste voice_id directly';
+  }
   // Only overwrite base_url with registry default when user manually changes provider
   if(!skipDefaults && p.base_url) document.getElementById('s-tts-base-url').value=p.base_url;
   // Only refresh voice list from server when user manually changes provider,
@@ -2780,7 +2784,7 @@ async function loadState(){
     // Pass skipDefaults=true so it doesn't overwrite base_url/voice with registry defaults
     onTTSProviderChange(true);
     // Restore manual voice ID field for ElevenLabs
-    if(data.tts_provider_id==='elevenlabs' && currentVoice){
+    if((data.tts_provider_id==='elevenlabs'||data.tts_provider_id==='hume') && currentVoice){
       const vidEl=document.getElementById('s-voice-id');
       if(vidEl) vidEl.value=currentVoice;
     }

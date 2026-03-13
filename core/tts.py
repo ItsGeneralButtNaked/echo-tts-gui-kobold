@@ -59,6 +59,14 @@ TTS_PROVIDER_REGISTRY: dict[str, dict] = {
         "api_style":      "elevenlabs",
         "output_format":  "mp3",
     },
+    "hume": {
+        "label":          "Hume Octave (API)",
+        "base_url":       "https://api.hume.ai",
+        "needs_api_key":  True,
+        "needs_voice":    False,        # optional — Hume auto-generates a voice if omitted
+        "api_style":      "hume",
+        "output_format":  "mp3",
+    },
     "openai_tts": {
         "label":          "OpenAI TTS (API)",
         "base_url":       "https://api.openai.com",
@@ -73,6 +81,7 @@ TTS_PROVIDER_REGISTRY: dict[str, dict] = {
 BUILTIN_VOICES: dict[str, list[str]] = {
     "openai_tts":  ["alloy", "echo", "nova", "onyx", "shimmer", "fable"],
     "elevenlabs":  [],   # fetched from API at runtime
+    "hume":        [],   # fetched from API at runtime
 }
 
 
@@ -158,6 +167,26 @@ class TTSCaller:
                 # Return "Name (voice_id)" so the dropdown is human-readable.
                 # The settings route strips the suffix back to just the id when saving.
                 return [f"{v.get('name','?')} ({v['voice_id']})" for v in voices]
+            elif style == "hume":
+                hdrs = {"X-Hume-Api-Key": self.api_key} if self.api_key else {}
+                # Fetch both custom voices and Hume's voice library
+                custom, library = [], []
+                try:
+                    r = requests.get(f"{self.base_url}/v0/tts/voices", headers=hdrs, timeout=5)
+                    custom = r.json() if isinstance(r.json(), list) else r.json().get("voices", [])
+                except Exception:
+                    pass
+                try:
+                    r2 = requests.get(f"{self.base_url}/v0/tts/voices?provider=HUME_AI", headers=hdrs, timeout=5)
+                    library = r2.json() if isinstance(r2.json(), list) else r2.json().get("voices", [])
+                except Exception:
+                    pass
+                results = []
+                for v in library:
+                    results.append(f"{v.get('name','?')} [Hume] ({v.get('id', v.get('name',''))})")
+                for v in custom:
+                    results.append(f"{v.get('name','?')} [Custom] ({v.get('id', v.get('name',''))})")
+                return results
         except Exception as e:
             print(f"[TTS] list_voices failed ({self.provider_id}): {e}")
         return []
@@ -182,6 +211,9 @@ class TTSCaller:
             elif style == "elevenlabs":
                 hdrs = {"xi-api-key": self.api_key} if self.api_key else {}
                 requests.get(f"{self.base_url}/v1/user", headers=hdrs, timeout=4)
+            elif style == "hume":
+                hdrs = {"X-Hume-Api-Key": self.api_key} if self.api_key else {}
+                requests.get(f"{self.base_url}/v0/tts/voices", headers=hdrs, timeout=4)
             label = TTS_PROVIDER_REGISTRY.get(self.provider_id, {}).get("label", self.provider_id)
             return True, label
         except Exception as e:
@@ -200,6 +232,8 @@ class TTSCaller:
             yield from self._stream_coqui(text)
         elif style == "elevenlabs":
             yield from self._stream_elevenlabs(text, cancel)
+        elif style == "hume":
+            yield from self._stream_hume(text, cancel)
         else:
             raise ValueError(f"Unknown TTS api_style: {style!r}")
 
@@ -333,6 +367,59 @@ class TTSCaller:
             resp.close()
             resp = requests.post(
                 f"{self.base_url}/v1/text-to-speech/{voice_id}",
+                headers=headers, json=payload, timeout=120,
+            )
+        resp.raise_for_status()
+        for chunk in resp.iter_content(4096):
+            if cancel and cancel.is_set():
+                break
+            if chunk:
+                yield chunk
+
+    def _stream_hume(self, text: str, cancel=None) -> Iterator[bytes]:
+        """Hume Octave TTS — streams MP3 via /v0/tts/stream/file.
+        Falls back to /v0/tts/file (non-streaming) on error.
+        Voice can be a voice ID (UUID) or a voice name from the library.
+        If no voice is set, Hume auto-generates one based on the text context.
+        """
+        if not self.api_key:
+            raise ValueError("Hume API key not set — enter your key in TTS settings and hit APPLY")
+        headers = {
+            "X-Hume-Api-Key": self.api_key,
+            "Content-Type":   "application/json",
+            "Accept":         "audio/mpeg",
+        }
+        # Build the voice spec if one is configured
+        voice_spec: dict | None = None
+        if self.voice:
+            v = self.voice.strip()
+            # UUIDs → specify by id; anything else treat as a name from the Hume library
+            import re as _re
+            if _re.match(r'^[0-9a-f\-]{36}$', v, _re.I):
+                voice_spec = {"id": v}
+            else:
+                voice_spec = {"name": v, "provider": "HUME_AI"}
+        # Utterances format required by Hume API
+        utterance: dict = {"text": text}
+        if voice_spec:
+            utterance["voice"] = voice_spec
+        if self.extra.get("hume_description"):
+            utterance["description"] = self.extra["hume_description"]
+        payload = {
+            "utterances": [utterance],
+            "format":     {"type": "mp3"},
+            "instant_mode": self.extra.get("hume_instant_mode", True),
+        }
+        # Try streaming endpoint first
+        resp = requests.post(
+            f"{self.base_url}/v0/tts/stream/file",
+            headers=headers, json=payload, stream=True, timeout=120,
+        )
+        if not resp.ok:
+            print(f"[TTS/Hume] Streaming failed ({resp.status_code}), falling back to /v0/tts/file")
+            resp.close()
+            resp = requests.post(
+                f"{self.base_url}/v0/tts/file",
                 headers=headers, json=payload, timeout=120,
             )
         resp.raise_for_status()
