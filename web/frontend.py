@@ -614,6 +614,13 @@ FRONTEND_HTML = r"""<!DOCTYPE html>
       <button class="btn" style="flex-shrink:0;padding:4px 8px;font-size:10px;color:#ff6600;border-color:#7a3300" onclick="clearConvRagFile()" title="Delete the conversation RAG file for this character">CLEAR FILE</button>
     </div>
 
+    <!-- ASCII art library -->
+    <div class="setting-row">
+      <label>ASCII ART</label>
+      <span id="art-lib-count" style="font-size:11px;color:#888;flex:1">0 pieces</span>
+      <button class="btn" onclick="reloadArtLib()" title="Reload art pieces from the ascii_art/ directory">RELOAD</button>
+    </div>
+
     <!-- Extra RAG (manual file load) -->
     <div class="setting-row">
       <label>EXTRA RAG</label>
@@ -1667,19 +1674,45 @@ async function sendText(){
 
 // Effect name aliases for !fx <name> — forgiving but unambiguous (only matched when !fx prefix used)
 const _FX_CMD_MAP = {
-  matrix:      'matrix_rain',   rain:        'matrix_rain',
-  glitch:      'glitch_storm',  storm:       'glitch_storm',
-  static:      'signal_static', noise:       'signal_static',
-  particles:   'particle_burst',burst:       'particle_burst', fireworks: 'particle_burst',
-  scanlines:   'scanline_warp', warp:        'scanline_warp',  crt:       'scanline_warp',
-  corrupt:     'data_corruption',corruption: 'data_corruption',
-  heartbeat:   'heartbeat',     pulse:       'heartbeat',      ekg:       'heartbeat',
-  hypno:       'hypno_spiral',  spiral:      'hypno_spiral',   trance:    'hypno_spiral',
-  heart:       'heart_pulse',   love:        'heart_pulse',    hearts:    'heart_scatter',
-  scatter:     'heart_scatter', floating:    'heart_scatter',
-  random:      'random',        r:           'random',
+  matrix:      'matrix_rain',        rain:        'matrix_rain',
+  glitch:      'glitch_storm',       storm:       'glitch_storm',
+  static:      'signal_static',      noise:       'signal_static',
+  particles:   'particle_burst',     burst:       'particle_burst',    fireworks: 'particle_burst',
+  scanlines:   'scanline_warp',      warp:        'scanline_warp',     crt:       'scanline_warp',
+  corrupt:     'data_corruption',    corruption:  'data_corruption',
+  heartbeat:   'heartbeat',          pulse:       'heartbeat',         ekg:       'heartbeat',
+  hypno:       'hypno_spiral',       spiral:      'hypno_spiral',      trance:    'hypno_spiral',
+  heart:       'heart_pulse',        love:        'heart_pulse',       hearts:    'heart_scatter',
+  scatter:     'heart_scatter',      floating:    'heart_scatter',
+  vhs:         'vhs_rewind',         rewind:      'vhs_rewind',        tape:      'vhs_rewind',
+  neural:      'neural_fire',        neurons:     'neural_fire',       synapses:  'neural_fire',
+  melt:        'pixel_melt',         pixels:      'pixel_melt',
+  void:        'void_pulse',         abyss:       'void_pulse',
+  snap:        'static_burst',       zap:         'static_burst',
+  cascade:     'cascade',            fall:        'cascade',
+  bloom:       'chromatic_bloom',    chromatic:   'chromatic_bloom',
+  crack:       'screen_crack',       shatter:     'screen_crack',
+  flatline:    'ekg_flatline',       dead:        'ekg_flatline',
+  binary:      'binary_rain',        ones:        'binary_rain',
+  warp:        'warp_drive',         hyperspace:  'warp_drive',        jump:      'warp_drive',
+  acid:        'acid_wash',          wash:        'acid_wash',
+  ghost:       'ghost_signal',       haunted:     'ghost_signal',
+  memory:      'memory_leak',        leak:        'memory_leak',       hex:       'memory_leak',
+  hologram:    'hologram',           holo:        'hologram',
+  shockwave:   'shockwave',          shock:       'shockwave',         wave:      'shockwave',
+  morse:       'morse',              signal:      'morse',
+  thermal:     'thermal_vision',     heat:        'thermal_vision',    infrared:  'thermal_vision',
+  digital:     'digital_rain_color', colour:      'digital_rain_color',
+  random:      'random',             r:           'random',
 };
-const _FX_ALL = ['matrix_rain','glitch_storm','signal_static','particle_burst','scanline_warp','data_corruption','heartbeat','hypno_spiral','heart_pulse','heart_scatter'];
+const _FX_ALL = [
+  'matrix_rain','glitch_storm','signal_static','particle_burst','scanline_warp',
+  'data_corruption','heartbeat','hypno_spiral','heart_pulse','heart_scatter',
+  'vhs_rewind','neural_fire','pixel_melt','void_pulse','static_burst','cascade',
+  'chromatic_bloom','screen_crack','ekg_flatline','binary_rain','warp_drive',
+  'acid_wash','ghost_signal','memory_leak','hologram','shockwave','morse',
+  'thermal_vision','digital_rain_color',
+];
 
 function _fxHandleCommand(rawText) {
   const parts  = rawText.trim().split(/\s+/);
@@ -1700,6 +1733,25 @@ function _fxHandleCommand(rawText) {
       '  !fx hypno      — hypno spiral',
       '  !fx heart      — pulsing heart',
       '  !fx hearts     — floating hearts',
+      '  !fx vhs        — vhs rewind',
+      '  !fx neural     — neural fire',
+      '  !fx melt       — pixel melt',
+      '  !fx void       — void pulse',
+      '  !fx snap       — static burst',
+      '  !fx cascade    — cascade fall',
+      '  !fx bloom      — chromatic bloom',
+      '  !fx crack      — screen crack',
+      '  !fx flatline   — ekg flatline',
+      '  !fx binary     — binary rain',
+      '  !fx warp       — warp drive',
+      '  !fx acid       — acid wash',
+      '  !fx ghost      — ghost signal',
+      '  !fx memory     — memory leak',
+      '  !fx hologram   — hologram',
+      '  !fx shockwave  — shockwave',
+      '  !fx morse      — morse flash',
+      '  !fx thermal    — thermal vision',
+      '  !fx digital    — digital rain colour',
     ].join('\n');
     addBubble('assistant', lines);
     return;
@@ -2435,6 +2487,18 @@ async function clearConvRagFile(){
   document.getElementById('conv-rag-status').textContent = _convRagEnabled ? 'file cleared — will rebuild' : 'off';
 }
 
+async function reloadArtLib(){
+  const btn = event.target;
+  btn.disabled = true; btn.textContent = '...';
+  try{
+    const r = await fetch('/ascii_art/reload',{method:'POST'});
+    const d = await r.json();
+    const el = document.getElementById('art-lib-count');
+    if(el) el.textContent = d.count === 0 ? 'no files loaded' : d.count + ' piece' + (d.count===1?'':'s') + ' loaded';
+  }catch(e){ console.error('[ART]',e); }
+  btn.disabled = false; btn.textContent = 'RELOAD';
+}
+
 // ── Extra RAG ─────────────────────────────────────────────────────────────
 async function loadRag(){
   const sel=document.getElementById('s-rag-file');
@@ -2802,6 +2866,12 @@ async function loadState(){
       if(thrSlider && data.conv_rag_threshold){ thrSlider.value = data.conv_rag_threshold; }
       if(thrVal   && data.conv_rag_threshold){ thrVal.textContent = data.conv_rag_threshold + ' msgs'; }
       _updateConvRagUI();
+    }
+
+    // ASCII art library count
+    if(data.art_lib_count !== undefined){
+      const el = document.getElementById('art-lib-count');
+      if(el) el.textContent = data.art_lib_count === 0 ? 'no files loaded' : data.art_lib_count + ' piece' + (data.art_lib_count === 1 ? '' : 's') + ' loaded';
     }
 
     // Extra RAG status — restore selected file and semantic checkbox
@@ -4947,18 +5017,736 @@ function _stripCodeForTTS(text) {
     });
   }
 
+  // ── Avatar layer distortion ───────────────────────────────────────────────
+  // Applies temporary CSS filter/transform to the avatar image element,
+  // synced to the currently running canvas effect.
+  let _avFxDistortTimer = null;
+  function _avDistort(mode, durationMs) {
+    const img = document.getElementById('avatar-img');
+    if (!img) return;
+    clearTimeout(_avFxDistortTimer);
+    // Filter only — never touch transform, avatar pan/zoom owns that
+    img.style.transition = 'filter 0.2s ease';
+    if (mode === 'rgb') {
+      img.style.filter = 'hue-rotate(30deg) saturate(2.2) brightness(1.15)';
+    } else if (mode === 'invert') {
+      img.style.filter = 'invert(0.85) hue-rotate(180deg) brightness(1.2)';
+    } else if (mode === 'mono') {
+      img.style.filter = 'grayscale(1) brightness(0.7) contrast(1.4)';
+    } else if (mode === 'bloom') {
+      img.style.filter = 'brightness(1.4) saturate(1.8) blur(0.6px)';
+    } else if (mode === 'glitch') {
+      img.style.filter = 'hue-rotate(90deg) saturate(3) contrast(1.5)';
+    } else if (mode === 'void') {
+      img.style.filter = 'brightness(0.2) saturate(0.3) contrast(2)';
+    } else if (mode === 'heat') {
+      img.style.filter = 'sepia(0.6) saturate(2.5) hue-rotate(-20deg) brightness(1.1)';
+    }
+    // Restore filter only
+    _avFxDistortTimer = setTimeout(() => {
+      img.style.transition = 'filter 0.9s ease';
+      img.style.filter = '';
+    }, durationMs * 0.72);
+  }
+
+  // ── EFFECT: VHS Rewind ────────────────────────────────────────────────────
+  function fxVhsRewind(durationMs = 2800) {
+    _avDistort('rgb', durationMs);
+    _fxShow(durationMs, (ctx, t, W, H) => {
+      const progress = t / durationMs;
+      const intensity = Math.sin(progress * Math.PI);
+      ctx.clearRect(0, 0, W, H);
+      // Horizontal scan tears
+      const numTears = Math.floor(3 + intensity * 14);
+      for (let i = 0; i < numTears; i++) {
+        const y  = Math.random() * H;
+        const bh = (1 + Math.random() * 8) * devicePixelRatio;
+        const dx = (Math.random() < 0.5 ? -1 : 1) * (8 + Math.random() * 60) * devicePixelRatio * intensity;
+        ctx.fillStyle = _fxC(0.25 + Math.random() * 0.4, Math.random() > 0.5 ? -40 : 40);
+        ctx.fillRect(dx, y, W, bh);
+      }
+      // RGB separation lines
+      const numRgb = Math.floor(intensity * 6);
+      for (let i = 0; i < numRgb; i++) {
+        const gy = Math.random() * H;
+        const gh = (3 + Math.random() * 18) * devicePixelRatio;
+        ctx.fillStyle = _fxC(0.22 * intensity, -50);
+        ctx.fillRect(-8 * devicePixelRatio, gy, W, gh);
+        ctx.fillStyle = _fxC(0.22 * intensity, 50);
+        ctx.fillRect(8 * devicePixelRatio, gy, W, gh);
+      }
+      // Speed lines top-to-bottom
+      if (intensity > 0.3) {
+        ctx.fillStyle = `rgba(255,255,255,${0.04 * intensity})`;
+        for (let y = 0; y < H; y += 2 * devicePixelRatio)
+          if (Math.random() < 0.15) ctx.fillRect(0, y, W, devicePixelRatio);
+      }
+      // Tracking noise band sweeping downward
+      const bandY = (t * 0.00045 * H) % (H * 1.2);
+      const bH2 = 28 * devicePixelRatio;
+      ctx.fillStyle = _fxCGlow(0.18 * intensity);
+      ctx.fillRect(0, bandY, W, bH2);
+    });
+  }
+
+  // ── EFFECT: Neural Fire ───────────────────────────────────────────────────
+  function fxNeuralFire(durationMs = 4000) {
+    let nodes = null;
+    _fxShow(durationMs, (ctx, t, W, H) => {
+      if (!nodes) {
+        nodes = Array.from({length: 18}, () => ({
+          x: Math.random() * W, y: Math.random() * H,
+          vx: (Math.random()-0.5)*0.4*devicePixelRatio,
+          vy: (Math.random()-0.5)*0.4*devicePixelRatio,
+          r: (2+Math.random()*3)*devicePixelRatio,
+          hOff: Math.floor(Math.random()*80)-40,
+        }));
+      }
+      const progress = t / durationMs;
+      const env = Math.sin(progress * Math.PI);
+      ctx.clearRect(0, 0, W, H);
+      // Move nodes
+      nodes.forEach(n => {
+        n.x = (n.x + n.vx + W) % W;
+        n.y = (n.y + n.vy + H) % H;
+      });
+      // Draw arcs between nearby nodes
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i+1; j < nodes.length; j++) {
+          const dx = nodes[j].x - nodes[i].x;
+          const dy = nodes[j].y - nodes[i].y;
+          const dist = Math.sqrt(dx*dx + dy*dy);
+          const thresh = W * 0.38;
+          if (dist > thresh) continue;
+          const strength = (1 - dist/thresh) * env;
+          if (Math.random() > 0.35) continue; // arc flickers
+          const mx = (nodes[i].x + nodes[j].x)/2 + (Math.random()-0.5)*dist*0.6;
+          const my = (nodes[i].y + nodes[j].y)/2 + (Math.random()-0.5)*dist*0.6;
+          ctx.beginPath();
+          ctx.moveTo(nodes[i].x, nodes[i].y);
+          ctx.quadraticCurveTo(mx, my, nodes[j].x, nodes[j].y);
+          ctx.strokeStyle = _fxCGlow(strength * 0.7, nodes[i].hOff);
+          ctx.lineWidth = (0.5 + strength*2.5) * devicePixelRatio;
+          ctx.shadowColor = _fxC(0.6, nodes[i].hOff);
+          ctx.shadowBlur = 8;
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+        }
+      }
+      // Draw nodes
+      nodes.forEach(n => {
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.r, 0, Math.PI*2);
+        ctx.fillStyle = _fxCGlow(env * 0.9, n.hOff);
+        ctx.fill();
+      });
+    });
+  }
+
+  // ── EFFECT: Pixel Melt ────────────────────────────────────────────────────
+  function fxPixelMelt(durationMs = 3600) {
+    _avDistort('glitch', durationMs);
+    let cols = null;
+    _fxShow(durationMs, (ctx, t, W, H) => {
+      const progress = t / durationMs;
+      const melt = Math.sin(progress * Math.PI);
+      const colW = Math.max(6, Math.floor(W / 48));
+      if (!cols) {
+        const n = Math.ceil(W / colW);
+        cols = Array.from({length: n}, () => ({
+          offset: (0.1 + Math.random() * 0.6) * H,
+          speed:  (0.5 + Math.random() * 1.5) * devicePixelRatio,
+          hOff:   Math.floor(Math.random()*80)-40,
+          len:    (0.1 + Math.random()*0.5) * H,
+        }));
+      }
+      ctx.clearRect(0, 0, W, H);
+      cols.forEach((col, i) => {
+        col.offset = Math.min(col.offset + col.speed * melt * 2, H * 1.1);
+        const a = melt * 0.6;
+        const grad = ctx.createLinearGradient(0, col.offset - col.len, 0, col.offset);
+        grad.addColorStop(0, _fxC(0, col.hOff));
+        grad.addColorStop(0.3, _fxC(a * 0.5, col.hOff));
+        grad.addColorStop(1, _fxCGlow(a, col.hOff));
+        ctx.fillStyle = grad;
+        ctx.fillRect(i * colW, col.offset - col.len, colW - 1, col.len);
+      });
+    });
+  }
+
+  // ── EFFECT: Void Pulse ────────────────────────────────────────────────────
+  function fxVoidPulse(durationMs = 4200) {
+    _avDistort('void', durationMs);
+    _fxShow(durationMs, (ctx, t, W, H) => {
+      const progress = t / durationMs;
+      const env = Math.sin(progress * Math.PI);
+      ctx.clearRect(0, 0, W, H);
+      const cx = W/2, cy = H/2;
+      const numRings = 5;
+      for (let ri = 0; ri < numRings; ri++) {
+        const phase = ((t * 0.0006 + ri/numRings) % 1);
+        const r = phase * Math.max(W, H) * 0.75;
+        const a = env * (1 - phase) * 0.55;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI*2);
+        ctx.strokeStyle = _fxC(a, ri*15, 60, 35);
+        ctx.lineWidth = (2 + (1-phase)*4) * devicePixelRatio;
+        ctx.stroke();
+      }
+      // Brief black pulse between rings
+      const blackAlpha = Math.pow(Math.sin(t * 0.008), 8) * env * 0.85;
+      if (blackAlpha > 0.01) {
+        ctx.fillStyle = `rgba(0,0,0,${blackAlpha})`;
+        ctx.fillRect(0, 0, W, H);
+      }
+    });
+  }
+
+  // ── EFFECT: Static Burst ──────────────────────────────────────────────────
+  function fxStaticBurst(durationMs = 900) {
+    _avDistort('mono', durationMs);
+    _fxShow(durationMs, (ctx, t, W, H) => {
+      const progress = t / durationMs;
+      // Sharp burst — strong at start, snap off
+      const alpha = Math.pow(1 - progress, 1.4) * 0.9;
+      const imgData = ctx.createImageData(W, H);
+      const d = imgData.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const v = Math.random() > 0.38 ? Math.floor(Math.random()*255) : 0;
+        d[i] = d[i+1] = d[i+2] = v;
+        d[i+3] = Math.floor(alpha * 255);
+      }
+      ctx.putImageData(imgData, 0, 0);
+    });
+  }
+
+  // ── EFFECT: Cascade ───────────────────────────────────────────────────────
+  function fxCascade(durationMs = 5000) {
+    const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789▓▒░█│┃┆┇┊┋╎╏║∥⫴⫿';
+    let cols = null, fontSize = 0, lastW = 0;
+    _fxShow(durationMs, (ctx, t, W, H) => {
+      const progress = t / durationMs;
+      const env = Math.sin(progress * Math.PI);
+      if (W !== lastW) {
+        fontSize = Math.max(12, Math.floor(W / devicePixelRatio / 22)) * devicePixelRatio;
+        const n = Math.floor(W / fontSize);
+        cols = Array.from({length: n}, () => ({
+          y: Math.random() * -H,
+          speed: (0.3 + Math.random() * 0.9) * devicePixelRatio,
+          hOff: Math.floor(Math.random()*40)-20,
+          lit: Math.floor(Math.random()*6)+2,
+        }));
+        lastW = W;
+      }
+      // Slow fade trail
+      ctx.fillStyle = `rgba(0,0,0,${0.06 * env + (1-env)*0.25})`;
+      ctx.fillRect(0, 0, W, H);
+      ctx.font = `${fontSize}px monospace`;
+      cols.forEach((col, i) => {
+        col.y += col.speed * (0.4 + env*0.6);
+        if (col.y > H + fontSize * col.lit) col.y = -fontSize * (2+Math.random()*4);
+        for (let li = 0; li < col.lit; li++) {
+          const cy2 = col.y - li * fontSize;
+          if (cy2 < -fontSize || cy2 > H + fontSize) continue;
+          const a = env * (li === 0 ? 0.95 : (1 - li/col.lit) * 0.6);
+          ctx.fillStyle = li === 0 ? _fxCGlow(a, col.hOff) : _fxC(a, col.hOff, 80, 50);
+          ctx.fillText(CHARS[Math.floor(Math.random()*CHARS.length)], i*fontSize, cy2);
+        }
+      });
+    });
+  }
+
+  // ── EFFECT: Chromatic Bloom ───────────────────────────────────────────────
+  function fxChromaticBloom(durationMs = 3000) {
+    _avDistort('bloom', durationMs);
+    _fxShow(durationMs, (ctx, t, W, H) => {
+      const progress = t / durationMs;
+      const env = Math.sin(progress * Math.PI);
+      ctx.clearRect(0, 0, W, H);
+      const cx = W/2, cy = H/2;
+      // Expanding bloom rings radiating from centre
+      const numRings = 7;
+      for (let ri = 0; ri < numRings; ri++) {
+        const phase = ((t * 0.0004 + ri * 0.14) % 1);
+        const r = 20*devicePixelRatio + phase * Math.min(W,H) * 0.6;
+        const a = env * (1 - phase) * 0.6;
+        const hOff = (ri * 25) - 60;
+        // Three colour rings offset slightly (chromatic aberration)
+        [-6, 0, 6].forEach((off, ci) => {
+          ctx.beginPath();
+          ctx.arc(cx + off*devicePixelRatio, cy, r, 0, Math.PI*2);
+          ctx.strokeStyle = _fxC(a * 0.7, hOff + ci*20);
+          ctx.lineWidth = (1.5 + (1-phase)*3) * devicePixelRatio;
+          ctx.stroke();
+        });
+      }
+      // Central glow
+      const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.min(W,H)*0.3);
+      grd.addColorStop(0, _fxCGlow(env * 0.7));
+      grd.addColorStop(1, _fxC(0));
+      ctx.fillStyle = grd;
+      ctx.beginPath();
+      ctx.arc(cx, cy, Math.min(W,H)*0.3, 0, Math.PI*2);
+      ctx.fill();
+    });
+  }
+
+  // ── EFFECT: Screen Crack ──────────────────────────────────────────────────
+  function fxScreenCrack(durationMs = 3800) {
+    let cracks = null;
+    function buildCrack(sx, sy, angle, depth, maxDepth) {
+      if (depth > maxDepth) return [];
+      const len = (30 + Math.random() * 80) * devicePixelRatio;
+      const ex = sx + Math.cos(angle) * len;
+      const ey = sy + Math.sin(angle) * len;
+      const segs = [{x1:sx, y1:sy, x2:ex, y2:ey, depth}];
+      const branches = depth < 2 ? 2 : 1;
+      for (let b = 0; b < branches; b++) {
+        const da = (Math.random() - 0.5) * 1.1 + (b === 1 ? 0.5 : -0.5);
+        segs.push(...buildCrack(ex, ey, angle + da, depth+1, maxDepth));
+      }
+      return segs;
+    }
+    _fxShow(durationMs, (ctx, t, W, H) => {
+      if (!cracks) {
+        const ox = (0.3 + Math.random()*0.4)*W;
+        const oy = (0.2 + Math.random()*0.4)*H;
+        const numArms = 5 + Math.floor(Math.random()*4);
+        cracks = [];
+        for (let a = 0; a < numArms; a++) {
+          const angle = (a/numArms)*Math.PI*2 + (Math.random()-0.5)*0.5;
+          cracks.push(...buildCrack(ox, oy, angle, 0, 3));
+        }
+      }
+      const progress = t / durationMs;
+      const reveal = Math.min(1, progress * 2.5);
+      const fade   = progress > 0.65 ? 1 - (progress-0.65)/0.35 : 1;
+      ctx.clearRect(0, 0, W, H);
+      const visCount = Math.floor(reveal * cracks.length);
+      cracks.slice(0, visCount).forEach(seg => {
+        const a = fade * (0.9 - seg.depth * 0.18);
+        ctx.beginPath();
+        ctx.moveTo(seg.x1, seg.y1);
+        ctx.lineTo(seg.x2, seg.y2);
+        ctx.strokeStyle = _fxCGlow(a, seg.depth * 15);
+        ctx.lineWidth = Math.max(0.5, (3 - seg.depth * 0.7)) * devicePixelRatio;
+        ctx.shadowColor = _fxC(0.5);
+        ctx.shadowBlur = 6;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      });
+    });
+  }
+
+  // ── EFFECT: EKG Flatline ──────────────────────────────────────────────────
+  function fxEkgFlatline(durationMs = 3500) {
+    _avDistort('mono', durationMs * 0.5);
+    _fxShow(durationMs, (ctx, t, W, H) => {
+      const progress = t / durationMs;
+      const env = Math.sin(progress * Math.PI);
+      ctx.clearRect(0, 0, W, H);
+      // Grid
+      ctx.strokeStyle = _fxCDim(0.15 * env);
+      ctx.lineWidth = devicePixelRatio;
+      const gs = 32 * devicePixelRatio;
+      for (let x = 0; x < W; x+=gs){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+      for (let y = 0; y < H; y+=gs){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+      const midY = H * 0.5;
+      const headX = (t * 0.00038 * W) % (W * 1.2);
+      // Flatline — just a straight line behind the head
+      ctx.beginPath();
+      ctx.strokeStyle = _fxC(env * 0.4);
+      ctx.lineWidth = 1.5 * devicePixelRatio;
+      ctx.moveTo(0, midY);
+      ctx.lineTo(Math.max(0, headX - W * 0.08), midY);
+      ctx.stroke();
+      // Spike at ~30% of the effect
+      const spikeAt = 0.3;
+      const spikeW = 0.1;
+      const inSpike = progress > spikeAt && progress < spikeAt + spikeW;
+      if (inSpike) {
+        const sp = (progress - spikeAt) / spikeW;
+        const spikeAmp = Math.sin(sp * Math.PI) * H * 0.45;
+        ctx.beginPath();
+        ctx.strokeStyle = _fxCGlow(env);
+        ctx.lineWidth = 3 * devicePixelRatio;
+        ctx.shadowColor = _fxC(0.8);
+        ctx.shadowBlur = 20;
+        ctx.moveTo(headX - 20*devicePixelRatio, midY);
+        ctx.lineTo(headX - 8*devicePixelRatio, midY - spikeAmp * 0.3);
+        ctx.lineTo(headX, midY - spikeAmp);
+        ctx.lineTo(headX + 8*devicePixelRatio, midY + spikeAmp * 0.5);
+        ctx.lineTo(headX + 18*devicePixelRatio, midY);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      }
+      // Head flash
+      if (headX > 0 && headX < W) {
+        ctx.fillStyle = _fxC(env * (inSpike ? 0.5 : 0.2));
+        ctx.fillRect(headX - 1.5*devicePixelRatio, 0, 3*devicePixelRatio, H);
+      }
+    });
+  }
+
+  // ── EFFECT: Binary Rain ───────────────────────────────────────────────────
+  function fxBinaryRain(durationMs = 4500) {
+    let drops = [], fontSize = 0, lastW = 0;
+    _fxShow(durationMs, (ctx, t, W, H) => {
+      const progress = t / durationMs;
+      const fadeAlpha = progress > 0.75 ? 1-(progress-0.75)/0.25 : 1;
+      if (W !== lastW) {
+        fontSize = Math.max(11, Math.floor(W/devicePixelRatio/32)) * devicePixelRatio;
+        drops = Array.from({length: Math.floor(W/fontSize)}, () => Math.random()*-50);
+        lastW = W;
+      }
+      ctx.fillStyle = `rgba(0,0,0,${0.1*fadeAlpha + (1-fadeAlpha)*0.3})`;
+      ctx.fillRect(0, 0, W, H);
+      ctx.font = `bold ${fontSize}px monospace`;
+      drops.forEach((y, i) => {
+        const ch = Math.random() > 0.5 ? '1' : '0';
+        ctx.fillStyle = _fxCGlow(0.95 * fadeAlpha);
+        ctx.fillText(ch, i*fontSize, y*fontSize);
+        ctx.fillStyle = _fxC(0.55 * fadeAlpha, 0, 70, 45);
+        if (y>1) ctx.fillText(Math.random()>0.5?'1':'0', i*fontSize, (y-1)*fontSize);
+        ctx.fillStyle = _fxCDim(0.3 * fadeAlpha);
+        if (y>3) ctx.fillText(Math.random()>0.5?'1':'0', i*fontSize, (y-3)*fontSize);
+        if (Math.random()>0.975 || drops[i]*fontSize>H) drops[i]=Math.random()*-30;
+        drops[i] += 0.6;
+      });
+    });
+  }
+
+  // ── EFFECT: Warp Drive ────────────────────────────────────────────────────
+  function fxWarpDrive(durationMs = 3200) {
+    let stars = null;
+    _fxShow(durationMs, (ctx, t, W, H) => {
+      const progress = t / durationMs;
+      const speed = Math.sin(progress * Math.PI);
+      if (!stars) {
+        stars = Array.from({length: 120}, () => ({
+          angle: Math.random() * Math.PI * 2,
+          dist: Math.random() * Math.min(W,H) * 0.45,
+          hOff: Math.floor(Math.random()*60)-30,
+          size: (0.5 + Math.random()*1.5)*devicePixelRatio,
+        }));
+      }
+      ctx.clearRect(0, 0, W, H);
+      const cx = W/2, cy = H/2;
+      stars.forEach(s => {
+        s.dist += speed * 4 * devicePixelRatio;
+        if (s.dist > Math.max(W,H)*0.7) { s.dist = 2*devicePixelRatio; s.angle = Math.random()*Math.PI*2; }
+        const x = cx + Math.cos(s.angle) * s.dist;
+        const y = cy + Math.sin(s.angle) * s.dist;
+        // Trail length proportional to speed and distance
+        const trailLen = speed * s.dist * 0.18;
+        const x2 = cx + Math.cos(s.angle) * (s.dist - trailLen);
+        const y2 = cy + Math.sin(s.angle) * (s.dist - trailLen);
+        const a = Math.min(1, s.dist / (Math.min(W,H)*0.2)) * speed;
+        ctx.beginPath();
+        ctx.moveTo(x2, y2);
+        ctx.lineTo(x, y);
+        ctx.strokeStyle = _fxCGlow(a, s.hOff);
+        ctx.lineWidth = s.size;
+        ctx.stroke();
+      });
+    });
+  }
+
+  // ── EFFECT: Acid Wash ─────────────────────────────────────────────────────
+  function fxAcidWash(durationMs = 4000) {
+    _avDistort('heat', durationMs);
+    _fxShow(durationMs, (ctx, t, W, H) => {
+      const progress = t / durationMs;
+      const env = Math.sin(progress * Math.PI);
+      ctx.clearRect(0, 0, W, H);
+      // Flowing noise bands using sine layering
+      for (let y = 0; y < H; y += 2*devicePixelRatio) {
+        const wave1 = Math.sin(y * 0.018 + t * 0.0022) * 0.5 + 0.5;
+        const wave2 = Math.sin(y * 0.009 - t * 0.0018 + 1.2) * 0.5 + 0.5;
+        const wave3 = Math.sin(y * 0.034 + t * 0.0031 + 2.4) * 0.5 + 0.5;
+        const hOff = (wave1 * 60 + wave2 * 40 - 50);
+        const sat  = 60 + wave3 * 40;
+        const lig  = 30 + wave2 * 30;
+        ctx.fillStyle = `hsla(${(_uiHue + hOff + 360)%360},${sat}%,${lig}%,${env * 0.45})`;
+        ctx.fillRect(0, y, W, 2*devicePixelRatio);
+      }
+    });
+  }
+
+  // ── EFFECT: Ghost Signal ──────────────────────────────────────────────────
+  function fxGhostSignal(durationMs = 5000) {
+    _avDistort('invert', durationMs);
+    _fxShow(durationMs, (ctx, t, W, H) => {
+      const progress = t / durationMs;
+      const env = Math.sin(progress * Math.PI);
+      ctx.clearRect(0, 0, W, H);
+      // Multiple ghost copies of a sine wave at different phases
+      const midY = H * 0.5;
+      for (let g = 0; g < 5; g++) {
+        const phaseOff = g * 0.4 + t * 0.0009;
+        const amp = H * 0.18 * (1 - g*0.15);
+        const a = env * (0.6 - g*0.1);
+        ctx.beginPath();
+        ctx.strokeStyle = _fxC(a, g*18-36);
+        ctx.lineWidth = (2 - g*0.3) * devicePixelRatio;
+        for (let x = 0; x < W; x += devicePixelRatio) {
+          const y = midY + Math.sin(x*0.012 + phaseOff) * amp
+                        + Math.sin(x*0.025 - phaseOff*1.3) * amp * 0.4;
+          x === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+        }
+        ctx.stroke();
+      }
+      // Flickering vertical noise
+      if (Math.random() < 0.3 * env) {
+        ctx.fillStyle = _fxCGlow(Math.random()*0.15*env);
+        ctx.fillRect(Math.random()*W, 0, (1+Math.random()*3)*devicePixelRatio, H);
+      }
+    });
+  }
+
+  // ── EFFECT: Memory Leak ───────────────────────────────────────────────────
+  function fxMemoryLeak(durationMs = 4800) {
+    const CHARS = '0123456789ABCDEFabcdef';
+    let blocks = null;
+    _fxShow(durationMs, (ctx, t, W, H) => {
+      if (!blocks) {
+        blocks = Array.from({length: 40}, () => ({
+          x: Math.random()*W, y: Math.random()*H,
+          w: (20+Math.random()*120)*devicePixelRatio,
+          h: (8+Math.random()*24)*devicePixelRatio,
+          hOff: Math.floor(Math.random()*80)-40,
+          phase: Math.random()*Math.PI*2,
+          speed: 0.002 + Math.random()*0.004,
+        }));
+      }
+      const progress = t / durationMs;
+      const env = Math.sin(progress * Math.PI);
+      ctx.clearRect(0, 0, W, H);
+      const fs = Math.max(8, 10)*devicePixelRatio;
+      ctx.font = `${fs}px monospace`;
+      blocks.forEach(b => {
+        const flicker = 0.3 + 0.7*(0.5 + 0.5*Math.sin(t*b.speed + b.phase));
+        const a = env * flicker;
+        if (a < 0.05) return;
+        // Block background
+        ctx.fillStyle = _fxCDim(a * 0.25, b.hOff);
+        ctx.fillRect(b.x, b.y, b.w, b.h);
+        // Hex content
+        ctx.fillStyle = _fxC(a * 0.85, b.hOff);
+        const chars = Math.floor(b.w / fs);
+        let str = '';
+        for (let c = 0; c < chars; c++) str += CHARS[Math.floor(Math.random()*CHARS.length)];
+        ctx.fillText(str, b.x + 2*devicePixelRatio, b.y + b.h - 3*devicePixelRatio);
+      });
+    });
+  }
+
+  // ── EFFECT: Hologram ──────────────────────────────────────────────────────
+  function fxHologram(durationMs = 5500) {
+    _avDistort('rgb', durationMs);
+    _fxShow(durationMs, (ctx, t, W, H) => {
+      const progress = t / durationMs;
+      const env = Math.sin(progress * Math.PI);
+      ctx.clearRect(0, 0, W, H);
+      // Horizontal scan bars sweeping upward
+      const barH = 3 * devicePixelRatio;
+      const scrollY = (t * 0.00012 * H) % H;
+      for (let y = 0; y < H + barH; y += barH * 2) {
+        const ty = (y - scrollY + H) % H;
+        ctx.fillStyle = _fxC(env * 0.08, 0, 60, 70);
+        ctx.fillRect(0, ty, W, barH);
+      }
+      // Vertical interference fringe
+      for (let x = 0; x < W; x += 4*devicePixelRatio) {
+        const wave = Math.sin(x*0.008 + t*0.002) * 0.5 + 0.5;
+        if (wave < 0.6) continue;
+        ctx.fillStyle = _fxC(env * 0.06 * wave, 20);
+        ctx.fillRect(x, 0, devicePixelRatio, H);
+      }
+      // Corner brackets — holographic frame
+      const bLen = Math.min(W,H)*0.12;
+      const bW = 2*devicePixelRatio;
+      const pad = 12*devicePixelRatio;
+      const corners = [[pad,pad,1,1],[W-pad,pad,-1,1],[pad,H-pad,1,-1],[W-pad,H-pad,-1,-1]];
+      corners.forEach(([cx,cy,sx,sy]) => {
+        ctx.strokeStyle = _fxCGlow(env*0.9);
+        ctx.lineWidth = bW;
+        ctx.shadowColor = _fxC(0.7);
+        ctx.shadowBlur = 10;
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + sx*bLen, cy); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx, cy + sy*bLen); ctx.stroke();
+        ctx.shadowBlur = 0;
+      });
+      // Flicker
+      if (Math.random() < 0.04) {
+        ctx.fillStyle = `rgba(0,0,0,${Math.random()*0.6})`;
+        ctx.fillRect(0, 0, W, H);
+      }
+    });
+  }
+
+  // ── EFFECT: Shockwave ─────────────────────────────────────────────────────
+  function fxShockwave(durationMs = 2200) {
+    _avDistort('bloom', durationMs);
+    _fxShow(durationMs, (ctx, t, W, H) => {
+      const progress = t / durationMs;
+      ctx.clearRect(0, 0, W, H);
+      const cx = W/2, cy = H/2;
+      // 3 rings at staggered phases
+      for (let ri = 0; ri < 3; ri++) {
+        const p = Math.min(1, progress * 1.8 - ri * 0.18);
+        if (p <= 0) continue;
+        const r = p * Math.max(W,H) * 0.65;
+        const a = (1-p) * (1 - ri*0.28) * 0.8;
+        const thickness = (1-p) * 18 * devicePixelRatio + 1;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI*2);
+        ctx.strokeStyle = _fxCGlow(a, ri*20);
+        ctx.lineWidth = thickness;
+        ctx.shadowColor = _fxC(0.6, ri*20);
+        ctx.shadowBlur = 20;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      }
+      // Central flash
+      if (progress < 0.15) {
+        const fa = (1 - progress/0.15) * 0.7;
+        const grd = ctx.createRadialGradient(cx,cy,0,cx,cy,Math.min(W,H)*0.3);
+        grd.addColorStop(0, _fxCGlow(fa));
+        grd.addColorStop(1, _fxC(0));
+        ctx.fillStyle = grd;
+        ctx.beginPath();
+        ctx.arc(cx, cy, Math.min(W,H)*0.3, 0, Math.PI*2);
+        ctx.fill();
+      }
+    });
+  }
+
+  // ── EFFECT: Morse Code ────────────────────────────────────────────────────
+  function fxMorse(durationMs = 4000) {
+    // Random sequence of dots and dashes as flashing light bars
+    const pattern = Array.from({length: 24}, () => Math.random() > 0.4);
+    let pulseIdx = 0, lastPulseT = 0;
+    const pulseMs = durationMs / pattern.length;
+    _fxShow(durationMs, (ctx, t, W, H) => {
+      pulseIdx = Math.floor(t / pulseMs);
+      const on = pattern[Math.min(pulseIdx, pattern.length-1)];
+      const progress = t / durationMs;
+      const env = Math.sin(progress * Math.PI);
+      ctx.clearRect(0, 0, W, H);
+      if (on) {
+        // Flash bar across the top and bottom
+        const barH2 = (6 + Math.random()*4) * devicePixelRatio;
+        ctx.fillStyle = _fxCGlow(env * 0.9);
+        ctx.shadowColor = _fxC(0.7);
+        ctx.shadowBlur = 18;
+        ctx.fillRect(0, 0, W, barH2);
+        ctx.fillRect(0, H-barH2, W, barH2);
+        ctx.shadowBlur = 0;
+        // Centre crosshair flash
+        ctx.fillStyle = _fxCGlow(env * 0.4);
+        ctx.fillRect(W*0.1, H/2 - devicePixelRatio, W*0.8, 2*devicePixelRatio);
+        ctx.fillRect(W/2 - devicePixelRatio, H*0.1, 2*devicePixelRatio, H*0.8);
+      }
+    });
+  }
+
+  // ── EFFECT: Thermal Vision ────────────────────────────────────────────────
+  function fxThermalVision(durationMs = 4500) {
+    _avDistort('heat', durationMs);
+    _fxShow(durationMs, (ctx, t, W, H) => {
+      const progress = t / durationMs;
+      const env = Math.sin(progress * Math.PI);
+      ctx.clearRect(0, 0, W, H);
+      // Thermal colour gradient wash using per-pixel noise
+      const imgData = ctx.createImageData(W, H);
+      const d = imgData.data;
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          // Simulate heat concentration near centre
+          const dx = (x/W - 0.5), dy = (y/H - 0.5);
+          const dist = Math.sqrt(dx*dx + dy*dy);
+          const heat = Math.max(0, 1 - dist*1.6) + Math.random()*0.15;
+          // Map heat to thermal palette: cold=blue, warm=green, hot=red/white
+          let r,g,b;
+          if (heat < 0.33)      { r=0;         g=heat*3*200;   b=255; }
+          else if (heat < 0.66) { r=heat*2*200; g=200;         b=200*(1-heat*2); }
+          else                  { r=255;        g=255*(1-heat); b=0; }
+          const i4 = (y*W + x)*4;
+          d[i4]   = r;  d[i4+1] = g;  d[i4+2] = b;
+          d[i4+3] = Math.floor(env * 0.55 * 255);
+        }
+      }
+      ctx.putImageData(imgData, 0, 0);
+      // Scan crosshair overlay
+      ctx.strokeStyle = `rgba(255,255,255,${env*0.4})`;
+      ctx.lineWidth = devicePixelRatio;
+      ctx.beginPath(); ctx.moveTo(W/2,0); ctx.lineTo(W/2,H); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0,H/2); ctx.lineTo(W,H/2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(W/2, H/2, Math.min(W,H)*0.15, 0, Math.PI*2); ctx.stroke();
+    });
+  }
+
+  // ── EFFECT: Digital Rain (coloured) ───────────────────────────────────────
+  function fxDigitalRainColor(durationMs = 5000) {
+    const CHARS = '░▒▓█▄▀■□▪▫◆◇○●◎⊕⊗⊙⊚0123456789';
+    let drops = [], fontSize = 0, lastW = 0;
+    _fxShow(durationMs, (ctx, t, W, H) => {
+      const progress = t / durationMs;
+      const fadeAlpha = progress > 0.78 ? 1-(progress-0.78)/0.22 : 1;
+      if (W !== lastW) {
+        fontSize = Math.max(10, Math.floor(W/devicePixelRatio/26)) * devicePixelRatio;
+        drops = Array.from({length: Math.floor(W/fontSize)}, (_, i) => ({
+          y: Math.random()*-60, hOff: (i*13)%120-60, speed: 0.4+Math.random()*0.8,
+        }));
+        lastW = W;
+      }
+      ctx.fillStyle = `rgba(0,0,0,${0.07*fadeAlpha+(1-fadeAlpha)*0.2})`;
+      ctx.fillRect(0,0,W,H);
+      ctx.font = `bold ${fontSize}px monospace`;
+      drops.forEach(d2 => {
+        const ch = CHARS[Math.floor(Math.random()*CHARS.length)];
+        ctx.fillStyle = _fxCGlow(0.9*fadeAlpha, d2.hOff);
+        ctx.fillText(ch, drops.indexOf(d2)*fontSize, d2.y*fontSize);
+        ctx.fillStyle = _fxC(0.6*fadeAlpha, d2.hOff, 80, 45);
+        if(d2.y>2) ctx.fillText(CHARS[Math.floor(Math.random()*CHARS.length)], drops.indexOf(d2)*fontSize, (d2.y-2)*fontSize);
+        if(Math.random()>0.97 || d2.y*fontSize>H) d2.y=Math.random()*-30;
+        d2.y += d2.speed;
+      });
+    });
+  }
+
   // ── Public dispatch ───────────────────────────────────────────────────────
   const _fxDispatch = {
-    matrix_rain:     (ms) => fxMatrixRain(ms||undefined),
-    glitch_storm:    (ms) => fxGlitchStorm(ms||undefined),
-    signal_static:   (ms) => fxSignalStatic(ms||undefined),
-    particle_burst:  (ms) => fxParticleBurst(ms||undefined),
-    scanline_warp:   (ms) => fxScanlineWarp(ms||undefined),
-    data_corruption: (ms) => fxDataCorruption(ms||undefined),
-    heartbeat:       (ms) => fxHeartbeat(ms||undefined),
-    hypno_spiral:    (ms) => fxHypnoSpiral(ms||undefined),
-    heart_pulse:     (ms) => fxHeartPulse(ms||undefined),
-    heart_scatter:   (ms) => fxHeartScatter(ms||undefined),
+    matrix_rain:        (ms) => fxMatrixRain(ms||undefined),
+    glitch_storm:       (ms) => fxGlitchStorm(ms||undefined),
+    signal_static:      (ms) => fxSignalStatic(ms||undefined),
+    particle_burst:     (ms) => fxParticleBurst(ms||undefined),
+    scanline_warp:      (ms) => fxScanlineWarp(ms||undefined),
+    data_corruption:    (ms) => fxDataCorruption(ms||undefined),
+    heartbeat:          (ms) => fxHeartbeat(ms||undefined),
+    hypno_spiral:       (ms) => fxHypnoSpiral(ms||undefined),
+    heart_pulse:        (ms) => fxHeartPulse(ms||undefined),
+    heart_scatter:      (ms) => fxHeartScatter(ms||undefined),
+    vhs_rewind:         (ms) => fxVhsRewind(ms||undefined),
+    neural_fire:        (ms) => fxNeuralFire(ms||undefined),
+    pixel_melt:         (ms) => fxPixelMelt(ms||undefined),
+    void_pulse:         (ms) => fxVoidPulse(ms||undefined),
+    static_burst:       (ms) => fxStaticBurst(ms||undefined),
+    cascade:            (ms) => fxCascade(ms||undefined),
+    chromatic_bloom:    (ms) => fxChromaticBloom(ms||undefined),
+    screen_crack:       (ms) => fxScreenCrack(ms||undefined),
+    ekg_flatline:       (ms) => fxEkgFlatline(ms||undefined),
+    binary_rain:        (ms) => fxBinaryRain(ms||undefined),
+    warp_drive:         (ms) => fxWarpDrive(ms||undefined),
+    acid_wash:          (ms) => fxAcidWash(ms||undefined),
+    ghost_signal:       (ms) => fxGhostSignal(ms||undefined),
+    memory_leak:        (ms) => fxMemoryLeak(ms||undefined),
+    hologram:           (ms) => fxHologram(ms||undefined),
+    shockwave:          (ms) => fxShockwave(ms||undefined),
+    morse:              (ms) => fxMorse(ms||undefined),
+    thermal_vision:     (ms) => fxThermalVision(ms||undefined),
+    digital_rain_color: (ms) => fxDigitalRainColor(ms||undefined),
   };
 
   window.triggerFX = function(effectName, durationMs) {

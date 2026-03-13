@@ -28,6 +28,7 @@ from core.tts          import TTS_PROVIDER_REGISTRY  # noqa: imported for route 
 from web.conv_rag        import ConvRAG
 from web.initiative      import Initiative, SW_JS
 from web.session_restore import restore_session_state
+from extras.ascii_art    import AsciiArtLibrary
 
 
 # ── Silence noisy-but-harmless Werkzeug broken-pipe / SSL EOF errors ──────────
@@ -115,6 +116,15 @@ def create_app(config: dict) -> tuple[Flask, dict]:
     conv_rag = ConvRAG(rag_dir=config["rag_conv_dir"])
     conv_rag.enabled   = bool(session.tts.extra.get("conv_rag_enabled",   False))
     conv_rag.threshold = int(session.tts.extra.get("conv_rag_threshold",  ConvRAG.DEFAULT_THRESHOLD))
+
+    # ── ASCII art library ─────────────────────────────────────────────────────
+    art_lib = AsciiArtLibrary()
+    _art_path = config.get("ascii_art_dir", "")
+    _art_count = art_lib.load(_art_path)
+    if _art_count:
+        print(f"[ASCII ART] Library ready — {_art_count} piece(s) from {_art_path}")
+    else:
+        print(f"[ASCII ART] No art files found at {_art_path!r} — LLM fallback active")
 
     # ── Initiative engine ─────────────────────────────────────────────────────
     initiative = Initiative()
@@ -229,6 +239,7 @@ def create_app(config: dict) -> tuple[Flask, dict]:
         get_conv_rag      = lambda: conv_rag,
         get_rag           = lambda: rag,
         get_frontend_html = lambda: FRONTEND_HTML,
+        get_art_lib       = lambda: art_lib,
     )
     app.register_blueprint(_chat_mod.chat_bp)
 
@@ -255,6 +266,8 @@ def create_app(config: dict) -> tuple[Flask, dict]:
         get_guest_config = lambda: (guest_mode, guest_config),
         get_active_mode  = get_active_mode,
         set_active_mode  = set_active_mode,
+        get_art_lib      = lambda: art_lib,
+        art_lib_path     = _art_path,
     )
     app.register_blueprint(_settings_mod.settings_bp)
 

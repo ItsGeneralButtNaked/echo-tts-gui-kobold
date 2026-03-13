@@ -102,7 +102,10 @@ class Session:
             tmp = self._session_file + ".tmp"
             with open(tmp, "w") as f:
                 json.dump(data, f, indent=2)
-            os.chmod(tmp, 0o600)
+            try:
+                os.chmod(tmp, 0o600)
+            except (NotImplementedError, AttributeError):
+                pass  # Windows — permissions not supported
             os.replace(tmp, self._session_file)
         except Exception as e:
             print(f"[SESSION] Save error: {e}")
@@ -143,6 +146,9 @@ class Session:
                 "*sends random ascii art*",
                 "*sends favorite ascii art*",
                 "*sends glitchy python message*",
+                "*sends a fake terminal status readout*",
+                "*sends a fake system diagnostic*",
+                "*sends a fake error log*",
             ])
         if self.auto_continue_mode == "aggressive":
             return random.choice(["*continues speaking*", "*keeps talking*", "*goes on*",

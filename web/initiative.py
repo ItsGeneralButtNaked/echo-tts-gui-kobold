@@ -94,6 +94,9 @@ class Initiative:
         "*sends random ascii art*",
         "*sends favorite ascii art*",
         "*sends glitchy python message*",
+        "*sends a fake terminal status readout*",
+        "*sends a fake system diagnostic*",
+        "*sends a fake error log*",
         # FX-only triggers — agent fires a visual effect with no LLM message
         "__FX:random__",
         "__FX:matrix_rain__",
@@ -101,6 +104,15 @@ class Initiative:
         "__FX:particle_burst__",
         "__FX:hypno_spiral__",
         "__FX:data_corruption__",
+        "__FX:vhs_rewind__",
+        "__FX:neural_fire__",
+        "__FX:void_pulse__",
+        "__FX:hologram__",
+        "__FX:warp_drive__",
+        "__FX:ghost_signal__",
+        "__FX:screen_crack__",
+        "__FX:shockwave__",
+        "__FX:morse__",
     ]
 
     def __init__(self):

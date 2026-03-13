@@ -35,10 +35,12 @@ _set_active_mode  = None  # (name: str) -> None
 
 def wire(*, get_session, get_rag, get_memory, get_safety, get_initiative, get_conv_rag,
          get_session_mode, set_session_mode, get_isolated_llm,
-         get_chars_mod, get_guest_config, get_active_mode=None, set_active_mode=None):
+         get_chars_mod, get_guest_config, get_active_mode=None, set_active_mode=None,
+         get_art_lib=None, art_lib_path=""):
     global _get_session, _get_rag, _get_memory, _get_safety, _get_initiative, _get_conv_rag
     global _get_session_mode, _set_session_mode, _get_isolated_llm
     global _get_chars_mod, _get_guest_config, _get_active_mode, _set_active_mode
+    global _get_art_lib, _art_lib_path
     _get_session      = get_session
     _get_rag          = get_rag
     _get_memory       = get_memory
@@ -52,6 +54,8 @@ def wire(*, get_session, get_rag, get_memory, get_safety, get_initiative, get_co
     _get_guest_config = get_guest_config
     _get_active_mode  = get_active_mode
     _set_active_mode  = set_active_mode
+    _get_art_lib      = get_art_lib or (lambda: None)
+    _art_lib_path     = art_lib_path
 
 
 # ── /state ────────────────────────────────────────────────────────────────────
@@ -169,6 +173,8 @@ def get_state():
         "conv_rag_threshold": _get_conv_rag().threshold,
         "conv_rag_file":      _get_conv_rag().filename,
         "conv_rag_exists":    _get_conv_rag().status()["exists"],
+        # ASCII art library
+        "art_lib_count": (_get_art_lib().count if _get_art_lib() else 0),
         # Memory
         "memory_enabled": SESSION.tts.extra.get("memory_enabled", _memory.enabled),
         "memory_count":   len(_memory.entries),
@@ -432,3 +438,15 @@ def guest_config():
         "title":      guest_cfg.get("title", ""),
         "character":  guest_cfg.get("character", ""),
     })
+
+
+# ── /ascii_art/reload ─────────────────────────────────────────────────────────
+
+@settings_bp.route("/ascii_art/reload", methods=["POST"])
+def ascii_art_reload():
+    lib = _get_art_lib()
+    if lib is None:
+        return jsonify({"ok": False, "error": "art library not configured"}), 500
+    count = lib.reload(_art_lib_path)
+    print(f"[ASCII ART] Reloaded — {count} piece(s) from {_art_lib_path!r}")
+    return jsonify({"ok": True, "count": count})

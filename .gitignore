@@ -5,9 +5,13 @@ characters/*
 !characters/Default/
 !characters/Default/**
 
+# Ignore everything in ASCII art
+ascii_art/*
+
 # Ignore this file
 eckotest.py
 ecko_session.json
+Docker.md
 
 # Python
 __pycache__/

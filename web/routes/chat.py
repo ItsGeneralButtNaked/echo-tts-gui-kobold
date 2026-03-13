@@ -99,10 +99,10 @@ _get_frontend_html = None  # () -> str
 
 def wire(*, get_session, get_safety, get_memory, get_client_llm,
          get_session_mode, get_initiative, get_conv_rag, get_rag,
-         get_frontend_html):
+         get_frontend_html, get_art_lib=None):
     global _get_session, _get_safety, _get_memory, _get_client_llm
     global _get_session_mode, _get_initiative, _get_conv_rag, _get_rag
-    global _get_frontend_html
+    global _get_frontend_html, _get_art_lib
     _get_session      = get_session
     _get_safety       = get_safety
     _get_memory       = get_memory
@@ -112,6 +112,7 @@ def wire(*, get_session, get_safety, get_memory, get_client_llm,
     _get_conv_rag     = get_conv_rag
     _get_rag          = get_rag
     _get_frontend_html = get_frontend_html
+    _get_art_lib      = get_art_lib or (lambda: None)
 
 
 # ── /chat ─────────────────────────────────────────────────────────────────────
@@ -141,7 +142,42 @@ def chat():
     # rather than treating it as a user turn.
     # is_fx_quip is also a silent user turn but must NOT be rewritten — the prompt is the point.
     if is_ac and not is_fx_quip:
-        user_text = "[System: The user is silent. Continue naturally from where you left off — stay in character, no lead-in, no filler.]"
+        _raw_ac = user_text.strip().lower()
+
+        # ── Special creative AC openers — rewrite to tight LLM directives ────
+        if _raw_ac == "*sends a fake terminal status readout*":
+            user_text = (
+                "[System: Output ONLY a short fake terminal status readout relevant to "
+                "your character or the conversation. Use monospace/ASCII formatting. "
+                "Include things like uptime, memory, processes, warnings. "
+                "Wrap it in a ```\\n...\\n``` code block. No prose outside the block. "
+                "Keep it under 20 lines. In character.]"
+            )
+        elif _raw_ac == "*sends a fake system diagnostic*":
+            user_text = (
+                "[System: Output ONLY a fake system diagnostic report relevant to your "
+                "character. Use monospace formatting with fake metrics, scan results, "
+                "anomalies, or status checks. Wrap in a ```\\n...\\n``` code block. "
+                "No prose outside the block. Under 20 lines. In character.]"
+            )
+        elif _raw_ac == "*sends a fake error log*":
+            user_text = (
+                "[System: Output ONLY a fake error log or stack trace relevant to your "
+                "character or the conversation. Use realistic-looking log formatting with "
+                "timestamps, severity levels, and cryptic but thematic messages. "
+                "Wrap in a ```\\n...\\n``` code block. No prose outside the block. "
+                "Under 20 lines. In character.]"
+            )
+        elif _raw_ac == "*sends glitchy python message*":
+            user_text = (
+                "[System: Output ONLY a short piece of glitchy, corrupted, or surreal "
+                "Python code relevant to your character or the conversation. It should "
+                "look like real code but with strange variable names, impossible logic, "
+                "or unsettling comments. Wrap in a ```python\\n...\\n``` code block. "
+                "No prose outside the block. Under 20 lines.]"
+            )
+        else:
+            user_text = "[System: The user is silent. Continue naturally from where you left off — stay in character, no lead-in, no filler.]"
 
     # Safety: only skip Layer 1 when the message was genuinely rewritten to the
     # internal AC directive above — not just because the client claimed is_ac=True.
@@ -157,6 +193,25 @@ def chat():
 
     image_b64  = data.get("image_b64",  None)
     image_mime = data.get("image_mime", "image/jpeg")
+
+    # ── ASCII art library short-circuit ──────────────────────────────────────
+    # If this is an AC/initiative art opener, serve from the local library
+    # rather than burning tokens asking the LLM to generate art.
+    # Intercept BEFORE acquiring the TTS mutex or touching SESSION.busy.
+    _ART_OPENERS = ("*sends random ascii art*", "*sends favorite ascii art*")
+    if user_text.strip().lower() in _ART_OPENERS:
+        _art_lib = _get_art_lib()
+        _art_piece = _art_lib.pick_fenced() if _art_lib else None
+        if _art_piece:
+            # Push bubble to SSE subscribers and return — no LLM call needed
+            push_chat_event("assistant", _art_piece)
+            SESSION.chat_history.append({"role": "assistant", "content": _art_piece})
+            _initiative.reschedule()
+            if SESSION_MODE != "isolated":
+                SESSION.save_persistent()
+            print("[ASCII ART] Served from library, skipped LLM")
+            return jsonify({"reply": _art_piece, "generated_images": []})
+        # Library empty — fall through to LLM as before
 
     # Signal any active TTS stream to stop and wait for mutex.
     # After the mutex is released we also fire an EchoTTS /api/stop-generation

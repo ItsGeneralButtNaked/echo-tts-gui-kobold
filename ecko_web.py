@@ -34,6 +34,7 @@ RAG_CONV_DIR  = os.path.join(RAG_DIR, "conversations")
 SAFETY_DIR    = os.path.join(_HERE, "safety")
 SESSION_FILE  = os.path.join(_HERE, "ecko_session.json")
 MEMORY_DIR    = os.path.join(_HERE, "memories")
+ASCII_ART_DIR = os.path.join(_HERE, "ascii_art")
 
 
 # ── One-time migration: move existing RAG files into subdirs ──────────────────
@@ -65,6 +66,7 @@ app, _services = create_app({
     "rag_conv_dir":   RAG_CONV_DIR,
     "safety_dir":     SAFETY_DIR,
     "memory_dir":     MEMORY_DIR,
+    "ascii_art_dir":  ASCII_ART_DIR,
     "guest_cfg_path": os.path.join(_HERE, "guest_config.json"),
 })
 
