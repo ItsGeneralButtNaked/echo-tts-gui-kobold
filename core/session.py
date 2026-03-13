@@ -100,6 +100,7 @@ class Session:
             }
             # Write to a temp file then atomically replace, with owner-only perms
             tmp = self._session_file + ".tmp"
+            os.makedirs(os.path.dirname(os.path.abspath(self._session_file)), exist_ok=True)
             with open(tmp, "w") as f:
                 json.dump(data, f, indent=2)
             try:

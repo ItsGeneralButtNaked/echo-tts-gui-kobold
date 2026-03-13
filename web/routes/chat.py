@@ -26,6 +26,7 @@ from flask import Blueprint, Response, jsonify, request
 
 from core.session import MAX_HISTORY
 from core.stt import transcribe_audio
+from core.tts import TTS_PROVIDER_REGISTRY
 from core.websearch import detect_search_intent, extract_query, brave_search, build_search_context
 from web.sanitise import strip_leaked_context
 
@@ -502,16 +503,16 @@ def tts():
     global _tts_cancel
     _tts_cancel.set()
 
-    # Ask EchoTTS/AllTalk to abort any in-flight inference before we acquire
-    # the mutex — this gives the TTS server the maximum lead time to stop, so
-    # by the time we actually POST /v1/audio/speech below the previous job is
-    # more likely to have cleared.  Fire-and-forget; failure is non-fatal.
-    try:
-        _tts_base = SESSION.tts.base_url.rstrip("/")
-        import requests as _req
-        _req.post(f"{_tts_base}/api/stop-generation", timeout=1)
-    except Exception:
-        pass
+    # Ask local TTS server (EchoTTS/AllTalk) to abort any in-flight inference.
+    # Skip for cloud API providers — they have no stop endpoint.
+    _api_style = TTS_PROVIDER_REGISTRY.get(SESSION.tts.provider_id, {}).get("api_style", "")
+    if _api_style not in ("elevenlabs", "openai_pcm_cloud"):
+        try:
+            _tts_base = SESSION.tts.base_url.rstrip("/")
+            import requests as _req
+            _req.post(f"{_tts_base}/api/stop-generation", timeout=1)
+        except Exception:
+            pass
 
     _tts_mutex.acquire()
 
@@ -537,8 +538,14 @@ def tts():
         finally:
             _tts_mutex.release()
 
-    return Response(generate(), mimetype="audio/wav",
-                    headers={"X-Content-Type-Options": "nosniff"})
+    _provider_fmt = TTS_PROVIDER_REGISTRY.get(SESSION.tts.provider_id, {}).get("output_format", "wav")
+    _mime = "audio/mpeg" if _provider_fmt == "mp3" else "audio/wav"
+
+    return Response(generate(), mimetype=_mime,
+                    headers={
+                        "X-Content-Type-Options": "nosniff",
+                        "X-Audio-Format": _provider_fmt,   # reliable signal for frontend
+                    })
 
 
 # ── /stt ─────────────────────────────────────────────────────────────────────

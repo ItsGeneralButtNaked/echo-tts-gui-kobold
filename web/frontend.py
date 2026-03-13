@@ -388,6 +388,10 @@ FRONTEND_HTML = r"""<!DOCTYPE html>
       <label>VOICE</label>
       <select id="s-voice"></select>
     </div>
+    <div class="setting-row" id="tts-field-voice-id" style="display:none">
+      <label>VOICE ID</label>
+      <input type="text" id="s-voice-id" placeholder="paste voice_id directly" style="flex:1;min-width:0;background:var(--panel);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font-mono);font-size:12px;padding:6px 10px;outline:none" title="Paste an ElevenLabs voice_id here to use it directly without selecting from the list above">
+    </div>
     <div class="setting-row">
       <label>KV SCALE</label>
       <input type="text" id="s-kv-scale" placeholder="off" style="max-width:60px" title="speaker_kv_scale (e.g. 1.25) — blank to disable">
@@ -1405,6 +1409,48 @@ async function playTTS(text,gen){
     const res=await fetch('/tts',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({text}),signal:_ttsAbortCtrl.signal});
     if(!res.ok){isPlaying=false;document.getElementById('playing-indicator').classList.remove('show');return;}
+
+    // ── MP3 path (ElevenLabs) ─────────────────────────────────────────────
+    // Buffer the full response, decode via decodeAudioData, play as one source.
+    // True streaming MP3 decode would need a JS MP3 parser; not worth the dep.
+    const _audioFmt=res.headers.get('X-Audio-Format')||'';
+    const _ct=(res.headers.get('Content-Type')||'').toLowerCase();
+    if(_audioFmt==='mp3'||_ct.includes('audio/mpeg')||_ct.includes('audio/mp3')){
+      const chunks=[];
+      const reader=res.body.getReader();
+      while(true){
+        const{done,value}=await reader.read();
+        if(done||stopCurrentAudio||_ttsGeneration!==gen) break;
+        if(value) chunks.push(value);
+      }
+      if(stopCurrentAudio||_ttsGeneration!==gen) return;
+      // Concatenate all chunks into a single ArrayBuffer
+      const totalLen=chunks.reduce((s,c)=>s+c.length,0);
+      const merged=new Uint8Array(totalLen);
+      let off=0; for(const c of chunks){merged.set(c,off);off+=c.length;}
+      let audioBuf;
+      try{ audioBuf=await audioCtx.decodeAudioData(merged.buffer); }
+      catch(e){ console.error('[TTS/MP3] decodeAudioData failed',e); return; }
+      if(stopCurrentAudio||_ttsGeneration!==gen) return;
+      const src=audioCtx.createBufferSource(); src.buffer=audioBuf;
+      src.connect(myGain);
+      src.onended=()=>{const idx=_scheduledSources.indexOf(src);if(idx!==-1)_scheduledSources.splice(idx,1);};
+      _scheduledSources.push(src); currentSource=src;
+      const startAt=audioCtx.currentTime+0.06;
+      src.start(startAt);
+      // Start subtitles
+      if(!_subStarted){_subStarted=true;if(typeof _subStart==='function')_subStart(text,gen);}
+      // Wait for playback to finish
+      const latency=(audioCtx.outputLatency||audioCtx.baseLatency||0);
+      const deadline=startAt+audioBuf.duration-audioCtx.currentTime+latency;
+      if(deadline>-0.5) await new Promise(r=>setTimeout(r,Math.max(0,deadline*1000)+500));
+      while(_scheduledSources.length>0&&!stopCurrentAudio&&_ttsGeneration===gen){
+        await new Promise(r=>setTimeout(r,80));
+      }
+      return; // MP3 path done — skip PCM path below
+    }
+
+    // ── PCM/WAV path (EchoTTS, Kokoro, AllTalk…) ─────────────────────────
     const reader=res.body.getReader();
     const BYTES_PER_SAMPLE=2, SCHEDULE_BYTES=CHUNK_SAMPLES*BYTES_PER_SAMPLE;
     let headerLeft=WAV_HEADER_BYTES, pcmBuf=new Uint8Array(0), schedTime=0, started=false;
@@ -1450,17 +1496,9 @@ async function playTTS(text,gen){
       scheduleChunk(pcmBuf.slice(0,trim));
     }
     if(started&&!stopCurrentAudio&&_ttsGeneration===gen){
-      // Wait until all scheduled sources have actually finished playing.
-      // Anchor to the last scheduled end time (schedTime) relative to *now*,
-      // not relative to when the stream started — if the final chunk was small
-      // and scheduled in the past, deadline would be near-zero and the tail
-      // would be skipped, clipping the last word.
       const latency=(audioCtx.outputLatency||audioCtx.baseLatency||0);
       const deadline=schedTime-audioCtx.currentTime+latency;
-      // 500ms tail: covers scheduling drift, device buffer flush, and slow stacks.
-      // Only sleep if there's actually audio left to play.
       if(deadline>-0.5) await new Promise(r=>setTimeout(r,Math.max(0,deadline*1000)+500));
-      // Poll until Web Audio has drained all sources (catches any scheduling drift)
       while(_scheduledSources.length>0&&!stopCurrentAudio&&_ttsGeneration===gen){
         await new Promise(r=>setTimeout(r,80));
       }
@@ -2018,6 +2056,9 @@ function onTTSProviderChange(skipDefaults){
   const pid=document.getElementById('s-tts-provider').value;
   const p=ttsProviderRegistry[pid]||{};
   document.getElementById('tts-field-api-key').style.display=p.needs_api_key?'flex':'none';
+  // Show manual voice ID input only for ElevenLabs
+  const vidRow=document.getElementById('tts-field-voice-id');
+  if(vidRow) vidRow.style.display=(pid==='elevenlabs')?'flex':'none';
   // Only overwrite base_url with registry default when user manually changes provider
   if(!skipDefaults && p.base_url) document.getElementById('s-tts-base-url').value=p.base_url;
   // Only refresh voice list from server when user manually changes provider,
@@ -2047,7 +2088,7 @@ async function applySettings(){
     tts_provider_id: tpid,
     tts_base_url:  document.getElementById('s-tts-base-url').value.trim(),
     tts_api_key:   document.getElementById('s-tts-api-key').value.trim(),
-    voice:         document.getElementById('s-voice').value,
+    voice:         (document.getElementById('s-voice-id')?.value?.trim()) || document.getElementById('s-voice').value,
     auto_continue_mode:    document.getElementById('s-ac-mode').value,
     auto_continue_enabled: acEnabled,
     initiative_enabled:    _initiativeEnabled,
@@ -2719,7 +2760,10 @@ async function loadState(){
     for(const[pid,pinfo]of Object.entries(providerRegistry)){const o=document.createElement('option');o.value=pid;o.textContent=pinfo.label;if(pid===data.provider_id)o.selected=true;psel.appendChild(o);}
     onProviderChange();
     document.getElementById('s-base-url').value=data.base_url||'';
-    document.getElementById('s-api-key').value=typeof data.api_key==='string'?data.api_key:'';
+    const _llmKeyEl=document.getElementById('s-api-key');
+    if(typeof data.api_key==='string') _llmKeyEl.value=data.api_key;
+    else if(data.api_key===true){_llmKeyEl.value='';_llmKeyEl.placeholder='(key saved — enter to replace)';}
+    else{_llmKeyEl.value='';_llmKeyEl.placeholder='sk-...';}
     document.getElementById('s-agent-id').value=data.agent_id||'';
     document.getElementById('s-model').value=data.model||'';
     document.getElementById('s-system-prompt').value=data.system_prompt||'';
@@ -2729,9 +2773,17 @@ async function loadState(){
     const tsel=document.getElementById('s-tts-provider');tsel.innerHTML='';
     for(const[tid,tinfo]of Object.entries(ttsProviderRegistry)){const o=document.createElement('option');o.value=tid;o.textContent=tinfo.label;if(tid===data.tts_provider_id)o.selected=true;tsel.appendChild(o);}
     document.getElementById('s-tts-base-url').value=data.tts_base_url||'';
-    document.getElementById('s-tts-api-key').value=typeof data.tts_api_key==='string'?data.tts_api_key:'';
+    const _ttsKeyEl=document.getElementById('s-tts-api-key');
+    if(typeof data.tts_api_key==='string') _ttsKeyEl.value=data.tts_api_key;
+    else if(data.tts_api_key===true){_ttsKeyEl.value='';_ttsKeyEl.placeholder='(key saved — enter to replace)';}
+    else{_ttsKeyEl.value='';_ttsKeyEl.placeholder='sk-...';}
     // Pass skipDefaults=true so it doesn't overwrite base_url/voice with registry defaults
     onTTSProviderChange(true);
+    // Restore manual voice ID field for ElevenLabs
+    if(data.tts_provider_id==='elevenlabs' && currentVoice){
+      const vidEl=document.getElementById('s-voice-id');
+      if(vidEl) vidEl.value=currentVoice;
+    }
 
     // Voice selector — build list and select the saved voice
     const vsel=document.getElementById('s-voice');vsel.innerHTML='';

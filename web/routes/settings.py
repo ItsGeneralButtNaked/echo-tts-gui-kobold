@@ -250,7 +250,11 @@ def update_settings():
     if "tts_api_key" in data and isinstance(data["tts_api_key"], str) and data["tts_api_key"] and data["tts_api_key"] not in ("true", "false"):
         SESSION.tts.api_key = data["tts_api_key"]
     if "voice" in data:
-        SESSION.tts.voice = data["voice"]
+        import re as _re
+        raw_voice = data["voice"]
+        # ElevenLabs list returns "Name (voice_id)" — extract just the id
+        _el_match = _re.match(r'^.+\(([A-Za-z0-9]+)\)\s*$', raw_voice)
+        SESSION.tts.voice = _el_match.group(1) if _el_match else raw_voice
     if "kv_scale" in data:
         val = data["kv_scale"]
         SESSION.tts.extra["kv_scale"] = float(val) if val not in (None, "", "null") else None

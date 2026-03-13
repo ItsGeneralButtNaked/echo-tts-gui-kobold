@@ -154,7 +154,10 @@ class TTSCaller:
             elif style == "elevenlabs":
                 hdrs = {"xi-api-key": self.api_key} if self.api_key else {}
                 r = requests.get(f"{self.base_url}/v1/voices", headers=hdrs, timeout=5)
-                return [v["voice_id"] for v in r.json().get("voices", [])]
+                voices = r.json().get("voices", [])
+                # Return "Name (voice_id)" so the dropdown is human-readable.
+                # The settings route strips the suffix back to just the id when saving.
+                return [f"{v.get('name','?')} ({v['voice_id']})" for v in voices]
         except Exception as e:
             print(f"[TTS] list_voices failed ({self.provider_id}): {e}")
         return []
@@ -299,8 +302,13 @@ class TTSCaller:
         r.raise_for_status()
         yield r.content
 
-    def _stream_elevenlabs(self, text: str) -> Iterator[bytes]:
-        """ElevenLabs streaming — yields MP3 chunks."""
+    def _stream_elevenlabs(self, text: str, cancel=None) -> Iterator[bytes]:
+        """ElevenLabs streaming — yields MP3 chunks.
+        Tries the streaming endpoint first; falls back to the standard endpoint
+        on 402 (free-tier accounts cannot use /stream).
+        """
+        if not self.api_key:
+            raise ValueError("ElevenLabs API key not set — enter your key in TTS settings and hit APPLY")
         voice_id = self.voice or "21m00Tcm4TlvDq8ikWAM"  # default: Rachel
         headers = {
             "xi-api-key":    self.api_key,
@@ -309,16 +317,27 @@ class TTSCaller:
         }
         payload = {
             "text":              text,
-            "model_id":          self.extra.get("model_id", "eleven_monolingual_v1"),
+            "model_id":          self.extra.get("model_id", "eleven_multilingual_v2"),
             "voice_settings":    self.extra.get("voice_settings", {
                 "stability": 0.5, "similarity_boost": 0.75,
             }),
         }
-        with requests.post(
+        # Try streaming endpoint first
+        resp = requests.post(
             f"{self.base_url}/v1/text-to-speech/{voice_id}/stream",
             headers=headers, json=payload, stream=True, timeout=120,
-        ) as resp:
-            resp.raise_for_status()
-            for chunk in resp.iter_content(4096):
-                if chunk:
-                    yield chunk
+        )
+        if resp.status_code == 402:
+            # Free-tier: streaming not available — fall back to standard endpoint
+            print("[TTS/ElevenLabs] Streaming endpoint requires paid plan, falling back to standard endpoint")
+            resp.close()
+            resp = requests.post(
+                f"{self.base_url}/v1/text-to-speech/{voice_id}",
+                headers=headers, json=payload, timeout=120,
+            )
+        resp.raise_for_status()
+        for chunk in resp.iter_content(4096):
+            if cancel and cancel.is_set():
+                break
+            if chunk:
+                yield chunk
