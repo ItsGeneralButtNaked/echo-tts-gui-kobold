@@ -347,6 +347,7 @@ The system is fully local and customizable.
 * **Python 3.11**
 * Local **Echo-TTS API**
 * Local **LLM server** (KoboldCPP recommended)
+* External APIs now supported (MistralAI, Elevenlabs, Hume)
 
 ---
 
