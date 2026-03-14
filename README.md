@@ -485,7 +485,7 @@ ecko/
 ECKO focuses on:
 
 * **Local-first AI**
-* **Low latency**
+* **Low latency and pristine quality audio (Echo-TTS)**
 * **Character-driven interaction**
 * **Simple extensibility**
 * **Minimal external dependencies**
@@ -504,7 +504,7 @@ Future improvements include:
 * Mini games in the code panel
 * User-editable initiative and AC prompt pools
 * ComfyUI workflows for avatar image creation
-* Native desktop app
+* Return of the native desktop app
 
 ---
 
@@ -525,6 +525,8 @@ This project builds upon the work of several open-source communities:
 * Local LLM ecosystem
 
 Without them this project would not exist.
+
+Extra shoutout to the bigbrains in the OpenSesame Discord server - I literally wouldn't have even started slop without you guys both laughing at my initial noob stack and helping me with the odd nudge in the right direction :P
 
 ---
 
