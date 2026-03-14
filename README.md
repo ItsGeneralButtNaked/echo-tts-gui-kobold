@@ -1,5 +1,7 @@
 # ECKO
 
+![Screenshot](screenshots/avatar.png)
+
 **ECKO** is a modular local AI companion system that combines:
 
 * **LLM chat**
