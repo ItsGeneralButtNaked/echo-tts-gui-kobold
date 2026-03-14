@@ -124,9 +124,10 @@ class AsciiArtLibrary:
 
     def _load_dir(self, dirpath: str) -> int:
         added = 0
-        for fname in sorted(os.listdir(dirpath)):
-            if fname.lower().endswith('.txt'):
-                added += self._load_file(os.path.join(dirpath, fname))
+        for root, _dirs, files in os.walk(dirpath):
+            for fname in sorted(files):
+                if fname.lower().endswith('.txt'):
+                    added += self._load_file(os.path.join(root, fname))
         return added
 
     def _load_file(self, filepath: str) -> int:

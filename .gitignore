@@ -8,6 +8,10 @@ characters/*
 # Ignore everything in ASCII art
 ascii_art/*
 
+# But allow the default folder
+!ascii_art/default/
+!ascii_art/default/**
+
 # Ignore this file
 eckotest.py
 ecko_session.json
