@@ -274,8 +274,10 @@ This stores:
 | Platform | Status                |
 | -------- | --------------------- |
 | Linux    | Fully supported       |
-| Windows  | Works but less tested |
+| Windows  | Fully Supported*      |
 | MacOS    | Not officially tested |
+
+* ECKO works fine on Windows but I still need test echo-tts-api container on Win10/11 
 
 ---
 
@@ -295,8 +297,12 @@ The system is intentionally modular so each component can evolve independently.
 
 # Future Development
 
-Possible future improvements include:
+Future improvements include:
 
+* Better documentation and readme
+* Test Echo-TTS-API docker container on windows for full windows support
+* Add more connectivity
+* ComfyUI workflows for avatar image creation
 * bring the native desktop app back
 
 ---
@@ -311,8 +317,10 @@ See repository license file.
 
 This project builds upon the work of several open-source communities:
 
-* Echo-TTS
-* KoboldCPP
+* Echo-TTS https://github.com/jordandare/echo-tts
+* Echo-TTS-API https://github.com/KevinAHM/echo-tts-api
+* KoboldCPP https://github.com/LostRuins/koboldcpp
+* PNGapp https://github.com/MarxyTV/pngapp
 * Local LLM ecosystem
 
 Without them this project would not exist.
