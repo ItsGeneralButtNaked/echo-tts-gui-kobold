@@ -203,12 +203,19 @@ FRONTEND_HTML = r"""<!DOCTYPE html>
     transition:opacity 2.5s ease;z-index:2;
     width:100%;height:100%;object-fit:contain;
   }
-  #avatar-code-canvas{position:absolute;inset:0;width:100%;height:100%;z-index:3;pointer-events:none;opacity:0;transition:opacity 2.5s ease}
-  #avatar-scanlines{position:absolute;inset:0;width:100%;height:100%;z-index:4;pointer-events:none}
-  #avatar-static-canvas{position:absolute;inset:0;width:100%;height:100%;z-index:5;pointer-events:none}
-  #avatar-color-overlay{position:absolute;inset:0;z-index:6;pointer-events:none;opacity:0;mix-blend-mode:color;background:var(--green)}
-  #avatar-sleep-overlay{position:absolute;inset:0;z-index:8;pointer-events:none;opacity:0;transition:opacity 4s ease;background:radial-gradient(ellipse at 50% 60%, transparent 30%, rgba(0,0,0,0.72) 100%)}
-  #avatar-glitch-bar{position:absolute;left:0;right:0;height:4px;z-index:7;pointer-events:none;opacity:0;background:var(--green);filter:blur(1px)}
+  #avatar-pixel-canvas{ display:none; }
+  /* Pixel wrap: scales down the whole img layer then back up via CSS */
+  #avatar-pixel-wrap{
+    position:absolute;inset:0;width:100%;height:100%;
+    pointer-events:none;overflow:hidden;
+    /* activated by JS: transform-origin, transform, image-rendering */
+  }
+  #avatar-code-canvas{position:absolute;inset:0;width:100%;height:100%;z-index:4;pointer-events:none;opacity:0;transition:opacity 2.5s ease}
+  #avatar-scanlines{position:absolute;inset:0;width:100%;height:100%;z-index:5;pointer-events:none}
+  #avatar-static-canvas{position:absolute;inset:0;width:100%;height:100%;z-index:6;pointer-events:none}
+  #avatar-color-overlay{position:absolute;inset:0;z-index:7;pointer-events:none;opacity:0;mix-blend-mode:color;background:var(--green)}
+  #avatar-sleep-overlay{position:absolute;inset:0;z-index:9;pointer-events:none;opacity:0;transition:opacity 4s ease;background:radial-gradient(ellipse at 50% 60%, transparent 30%, rgba(0,0,0,0.72) 100%)}
+  #avatar-glitch-bar{position:absolute;left:0;right:0;height:4px;z-index:8;pointer-events:none;opacity:0;background:var(--green);filter:blur(1px)}
 
   /* Wave strip */
   #avatar-wave-wrap{width:100%;height:70px;flex-shrink:0;background:var(--tint-slot);border-top:1px solid var(--tint-dark);transition:height .2s,opacity .2s;box-sizing:border-box}
@@ -825,6 +832,23 @@ FRONTEND_HTML = r"""<!DOCTYPE html>
       <input type="range" id="av-glitch-intensity" min="0.1" max="1" step="0.05" value="0.4" style="flex:1" oninput="">
     </div>
     <div class="setting-row">
+      <label style="min-width:90px">BLUR FILTER</label>
+      <button class="btn" id="av-pixel-btn" onclick="toggleAvPixel()" title="Soft blur filter on the avatar viewport">OFF</button>
+      <span style="font-size:10px;color:var(--text-dim);flex-shrink:0;margin-left:6px">BLUR</span>
+      <input type="range" id="av-pixel-size" min="0" max="3" step="0.1" value="1" style="flex:1;accent-color:var(--green);height:4px" oninput="_avApplyPixel()">
+      <span id="av-pixel-size-val" style="font-size:10px;color:var(--text-dim);min-width:32px;flex-shrink:0;text-align:right">1px</span>
+    </div>
+    <div class="setting-row" id="av-pixel-bilinear-row" style="display:none">
+      <label style="min-width:90px">CONTRAST</label>
+      <input type="range" id="av-pixel-contrast" min="80" max="200" step="5" value="100" style="flex:1;accent-color:var(--green);height:4px" oninput="_avApplyPixel()">
+      <span id="av-pixel-contrast-val" style="font-size:10px;color:var(--text-dim);min-width:36px;flex-shrink:0;text-align:right">100%</span>
+    </div>
+    <div class="setting-row" id="av-pixel-mode-row" style="display:none">
+      <label style="min-width:90px">MODE</label>
+      <button class="btn" id="av-pixel-bilinear-btn" onclick="toggleAvPixelBilinear()" title="Soft: blur only. Edge: blur + contrast">SOFT</button>
+      <span style="font-size:10px;color:var(--text-dim);flex:1;margin-left:8px" id="av-pixel-mode-label">edge enhance · adds contrast</span>
+    </div>
+    <div class="setting-row">
       <label style="min-width:90px">WIREFRAME BG</label>
       <button class="btn" id="av-wire-btn" onclick="toggleAvWireframe()" title="Perspective grid background">OFF</button>
       <button class="btn" id="av-wire-dir-btn" onclick="toggleAvWireDir()" title="Travel direction">▶ FWD</button>
@@ -861,7 +885,10 @@ FRONTEND_HTML = r"""<!DOCTYPE html>
     <button id="avatar-close-btn" onclick="closeAvatarOverlay()" title="Close avatar">✕ CLOSE</button>
         <div id="avatar-viewport">
           <canvas id="avatar-wireframe"></canvas>
+          <div id="avatar-pixel-wrap">
           <img id="avatar-img" src="" alt="" draggable="false">
+          </div>
+          <canvas id="avatar-pixel-canvas"></canvas>
           <canvas id="avatar-code-canvas"></canvas>
           <canvas id="avatar-scanlines"></canvas>
           <canvas id="avatar-static-canvas"></canvas>
@@ -902,6 +929,7 @@ FRONTEND_HTML = r"""<!DOCTYPE html>
         <button class="btn" id="avatar-mic-mute-btn" onclick="toggleMicMute()" title="Mute/unmute microphone" disabled style="opacity:0.35">🎙 MUTE</button>
         <button class="btn" onclick="stopAudio()">STOP</button>
         <button class="btn" id="avatar-text-toggle-btn" onclick="toggleAvatarTextInput()" title="Toggle text input">TEXT</button>
+        <button class="btn" id="av-pixel-hud-btn" onclick="toggleAvPixel()" title="Blur filter">BLUR</button>
         <div style="display:flex;align-items:center;gap:3px" title="Subtitle speed">
           <span style="font-size:9px;color:var(--text-dim);font-family:var(--font-mono)">CC</span>
           <input type="range" id="av-sub-speed-slider" min="4" max="30" step="1" value="11"
@@ -2217,6 +2245,10 @@ function _collectAvatarSettings() {
     av_tint_intensity:   parseFloat((document.getElementById('av-tint-intensity') ||{value:0.12}).value),
     av_glitch_enabled:   _avGlitchEnabled,
     av_glitch_intensity: parseFloat((document.getElementById('av-glitch-intensity')||{value:0.4}).value),
+    av_pixel_enabled:    _avPixelEnabled,
+    av_pixel_size:       parseFloat((document.getElementById('av-pixel-size')||{value:1}).value),
+    av_pixel_contrast:   parseInt((document.getElementById('av-pixel-contrast')||{value:100}).value),
+    av_pixel_bilinear:   _avPixelBilinear,
     av_wire_enabled:     _avWireEnabled,
     av_wire_floor:       _avWireFloor,
     av_wire_walls:       _avWireWalls,
@@ -2280,6 +2312,8 @@ function _applyAvatarSettings(d) {
   setVal('av-scanline-spacing', d.av_scanline_spacing);
   setVal('av-tint-intensity',   d.av_tint_intensity);
   setVal('av-glitch-intensity', d.av_glitch_intensity);
+  if (d.av_pixel_size     !== undefined) setVal('av-pixel-size',     d.av_pixel_size);
+  if (d.av_pixel_contrast !== undefined) setVal('av-pixel-contrast', d.av_pixel_contrast);
   setVal('av-wire-depth',       d.av_wire_depth);
   setVal('av-wire-speed',       d.av_wire_speed);
   setVal('av-talk-thresh',      d.av_talk_thresh);
@@ -2291,6 +2325,23 @@ function _applyAvatarSettings(d) {
   // Toggle buttons
   if (d.av_tint_enabled   !== undefined){ _avTintEnabled   = d.av_tint_enabled;   setBtn('av-tint-btn',   _avTintEnabled);   _avApplyTint(); }
   if (d.av_glitch_enabled !== undefined){ _avGlitchEnabled = d.av_glitch_enabled; setBtn('av-glitch-btn', _avGlitchEnabled); }
+  if (d.av_pixel_enabled  !== undefined){
+    _avPixelEnabled  = d.av_pixel_enabled;
+    _avPixelBilinear = !!d.av_pixel_bilinear;
+    const pBtn   = document.getElementById('av-pixel-btn');
+    const hudBtn = document.getElementById('av-pixel-hud-btn');
+    if (pBtn)   { pBtn.textContent   = _avPixelEnabled ? 'ON' : 'OFF'; pBtn.className   = 'btn' + (_avPixelEnabled ? ' on' : ''); }
+    if (hudBtn) { hudBtn.textContent = _avPixelEnabled ? '⬛ PIXEL' : 'PIXEL'; hudBtn.className = 'btn' + (_avPixelEnabled ? ' on' : ''); }
+    const bBtn = document.getElementById('av-pixel-bilinear-btn');
+    const lbl  = document.getElementById('av-pixel-mode-label');
+    if (bBtn) { bBtn.textContent = _avPixelBilinear ? 'SOFT' : 'EDGE'; bBtn.className = 'btn' + (_avPixelBilinear ? ' on' : ''); }
+    if (lbl)  lbl.textContent = _avPixelBilinear ? 'soft blur only' : 'edge enhance · adds contrast';
+    const row = document.getElementById('av-pixel-bilinear-row');
+    if (row) row.style.display = _avPixelEnabled ? '' : 'none';
+    const modeRow = document.getElementById('av-pixel-mode-row');
+    if (modeRow) modeRow.style.display = _avPixelEnabled ? '' : 'none';
+    if (_avPixelEnabled) _avApplyPixel();
+  }
   if (d.av_wire_enabled   !== undefined){ _avWireEnabled   = d.av_wire_enabled;   setBtn('av-wire-btn',   _avWireEnabled); }
   if (d.av_wire_floor     !== undefined){ _avWireFloor = d.av_wire_floor; const b=document.getElementById('av-wire-floor-btn'); if(b){b.className='btn'+(d.av_wire_floor?' on':'');} }
   if (d.av_wire_walls     !== undefined){ _avWireWalls = d.av_wire_walls; const b=document.getElementById('av-wire-walls-btn'); if(b){b.className='btn'+(d.av_wire_walls?' on':'');} }
@@ -3240,7 +3291,7 @@ function _avCurrentFrame() {
   return _avFrames.idle;
 }
 
-function _avUpdateDisplay() {
+function _avUpdateDisplayCore() {
   const img = document.getElementById('avatar-img');
   if (!img) return;
   if (!_avEnabled) { img.style.display = 'none'; return; }
@@ -3251,6 +3302,10 @@ function _avUpdateDisplay() {
   // Sleep vignette — fades in when sleeping, out when woken
   const sleepOv = document.getElementById('avatar-sleep-overlay');
   if (sleepOv) sleepOv.style.opacity = _avIsSleeping ? '1' : '0';
+}
+
+function _avUpdateDisplay() {
+  _avUpdateDisplayCore();
 }
 
 // Amplitude polling — taps the TTS analyser (character speaking)
@@ -3455,6 +3510,7 @@ function openAvatarOverlay() {
     _avStartEffectLoop();
     _avApplyTint();
     if (_avGlitchEnabled) _avStartGlitchScheduler();
+    if (_avPixelEnabled) { _avPixelRaf = null; _avApplyPixel(); }
     // Arm sleep timer in case audio is already idle when overlay opens
     _avArmSleepTimer();
     const ww = document.getElementById('avatar-wave-wrap');
@@ -4032,6 +4088,63 @@ function toggleAvGlitch() {
   else { clearInterval(_avGlitchTimer); _avGlitchBars = []; }
 }
 
+// ── Pixel filter ──────────────────────────────────────────────────────────────
+// Renders avatar frames and FX canvas through a downscale→upscale pipeline
+// to produce a hard 8-bit (nearest-neighbour) or soft 16-bit (bilinear) look.
+
+let _avPixelEnabled  = false;
+let _avPixelBilinear = false;
+let _avPixelSize     = 6;
+
+function toggleAvPixel() {
+  _avPixelEnabled = !_avPixelEnabled;
+  const btn    = document.getElementById('av-pixel-btn');
+  const hudBtn = document.getElementById('av-pixel-hud-btn');
+  const on = _avPixelEnabled;
+  if (btn)    { btn.textContent    = on ? 'ON' : 'OFF'; btn.className    = 'btn' + (on ? ' on' : ''); }
+  if (hudBtn) { hudBtn.textContent = on ? '≋ BLUR' : 'BLUR'; hudBtn.className = 'btn' + (on ? ' on' : ''); }
+  ['av-pixel-bilinear-row','av-pixel-mode-row'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = on ? '' : 'none';
+  });
+  _avApplyPixel();
+}
+
+function toggleAvPixelBilinear() {
+  _avPixelBilinear = !_avPixelBilinear;
+  const btn = document.getElementById('av-pixel-bilinear-btn');
+  const lbl = document.getElementById('av-pixel-mode-label');
+  if (btn) { btn.textContent = _avPixelBilinear ? 'SOFT' : 'EDGE'; btn.className = 'btn' + (_avPixelBilinear ? ' on' : ''); }
+  if (lbl) lbl.textContent = _avPixelBilinear ? 'soft blur only' : 'edge enhance · adds contrast';
+  _avApplyPixel();
+}
+
+function _avApplyPixel() {
+  const sizeSlider     = document.getElementById('av-pixel-size');
+  const sizeVal        = document.getElementById('av-pixel-size-val');
+  const contrastSlider = document.getElementById('av-pixel-contrast');
+  const contrastVal    = document.getElementById('av-pixel-contrast-val');
+  if (sizeSlider)     _avPixelSize = parseFloat(sizeSlider.value) || 0;
+  if (sizeVal)        sizeVal.textContent = _avPixelSize.toFixed(1) + 'px';
+  const contrast = contrastSlider ? parseInt(contrastSlider.value) || 100 : 100;
+  if (contrastVal)    contrastVal.textContent = contrast + '%';
+
+  const vp = document.getElementById('avatar-viewport');
+  if (!vp) return;
+
+  if (!_avPixelEnabled) {
+    vp.style.filter = '';
+    return;
+  }
+
+  const parts = [];
+  if (_avPixelSize > 0) parts.push(`blur(${_avPixelSize.toFixed(1)}px)`);
+  if (!_avPixelBilinear && contrast !== 100) parts.push(`contrast(${contrast}%)`);
+  if (_avPixelBilinear && contrast !== 100)  parts.push(`contrast(${contrast}%)`);
+  vp.style.filter = parts.length ? parts.join(' ') : '';
+}
+
+
 // ── Zoom / pan ────────────────────────────────────────────────────────────────
 let _avScale          = 1.5;
 let _avPanX           = 0;
@@ -4567,7 +4680,7 @@ function _stripCodeForTTS(text) {
   _fxCanvas.id = 'ecko-fx-canvas';
   _fxCanvas.style.cssText = [
     'position:absolute','inset:0','width:100%','height:100%',
-    'pointer-events:none','z-index:8','opacity:0',   // z-index 8 = above glitch-bar(7)
+    'pointer-events:none','z-index:10','opacity:0',  // z-index 10 = above glitch-bar(8) and sleep-overlay(9)
     'transition:opacity 0.35s ease',
   ].join(';');
 

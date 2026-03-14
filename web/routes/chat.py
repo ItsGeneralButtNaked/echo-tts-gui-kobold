@@ -178,6 +178,31 @@ def chat():
                 "to your character — strange variable names, impossible logic, unsettling "
                 "comments. Under 20 lines.]"
             )
+        elif _raw_ac == "*sends a fake terminal status display*":
+            user_text = (
+                "[System: Reply with ONLY a fenced code block — start your reply with "
+                "``` on its own line, end with ``` on its own line. No text before or "
+                "after the fences. Inside: a fake terminal status display relevant to "
+                "your character. Include things like uptime, memory, processes, "
+                "warnings. Under 20 lines. In character.]"
+            )
+        elif _raw_ac == "*runs a fake diagnostic on the conversation*":
+            user_text = (
+                "[System: Reply with ONLY a fenced code block — start your reply with "
+                "``` on its own line, end with ``` on its own line. No text before or "
+                "after the fences. Inside: a fake diagnostic report on your recent "
+                "conversation — reference actual topics you've discussed, fake sentiment "
+                "scores, anomaly flags, memory usage. Make it feel personal and in "
+                "character. Under 20 lines.]"
+            )
+        elif _raw_ac == "*sends a fake system scan readout*":
+            user_text = (
+                "[System: Reply with ONLY a fenced code block — start your reply with "
+                "``` on its own line, end with ``` on its own line. No text before or "
+                "after the fences. Inside: a fake system scan readout — port scan, "
+                "file integrity check, threat assessment, or similar. Thematic to your "
+                "character. Cryptic where appropriate. Under 20 lines.]"
+            )
         else:
             user_text = "[System: The user is silent. Continue naturally from where you left off — stay in character, no lead-in, no filler.]"
 
