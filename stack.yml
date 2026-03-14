@@ -1,0 +1,37 @@
+version: "3.9"
+
+services:
+  ecko:
+    image: ecko:latest
+    container_name: ecko
+    restart: unless-stopped
+
+    ports:
+      - "5050:5050"
+
+    volumes:
+      - ecko_ssl:/app/ssl
+      - ecko_memories:/app/memories
+      - ecko_rag:/app/rag
+      - ecko_safety:/app/safety
+      - ecko_static:/app/static
+      - ecko_logs:/app/logs
+      - /path/to/characters:/app/characters
+      - /path/to/characters_web:/app/characters_web
+      - /path/to/ascii_art:/app/ascii_art
+      - /path/to/guest_config.json:/app/guest_config.json:ro
+
+    environment:
+      - TTS_BASE=${TTS_BASE:-http://host-gateway:9000}
+      - EXTRA_CERT_IPS=${EXTRA_CERT_IPS:-}
+
+    extra_hosts:
+      - "host-gateway:host-gateway"
+
+volumes:
+  ecko_ssl:
+  ecko_memories:
+  ecko_rag:
+  ecko_safety:
+  ecko_static:
+  ecko_logs:
