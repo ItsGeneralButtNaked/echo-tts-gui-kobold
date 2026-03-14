@@ -167,7 +167,7 @@ def load_character():
     if char.get("tts_provider_id") and char["tts_provider_id"] in TTS_PROVIDER_REGISTRY:
         SESSION.tts.provider_id = char["tts_provider_id"]
         SESSION.tts.base_url    = char.get("tts_base_url", TTS_PROVIDER_REGISTRY[char["tts_provider_id"]]["base_url"])
-        SESSION.tts.api_key     = char.get("tts_api_key", "")
+        SESSION.tts.api_key     = char.get("tts_api_key") or SESSION.tts.api_key
     if char.get("voice"):
         SESSION.tts.voice = char["voice"]
 
