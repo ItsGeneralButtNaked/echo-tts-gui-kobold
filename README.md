@@ -1,6 +1,6 @@
 # ECKO
 
-![Screenshot](screenshots/avatar.png)
+![Screenshot](screenshots/ecko-main-resize.gif)
 
 **ECKO** is a modular local AI companion system that combines:
 
