@@ -253,11 +253,15 @@ def update_settings():
     if "voice" in data:
         import re as _re
         raw_voice = data["voice"]
-        # Strip display suffixes added by list_voices:
-        #   ElevenLabs: "Name (voice_id)"
-        #   Hume:       "Name [Hume] (uuid)" or "Name [Custom] (uuid)"
-        _el_match = _re.match(r'^.+?\s*(?:\[.*?\]\s*)?\(([A-Za-z0-9\-]+)\)\s*$', raw_voice)
-        SESSION.tts.voice = _el_match.group(1) if _el_match else raw_voice
+        # Reject data URLs and base64 blobs — never valid voice IDs
+        if raw_voice and (raw_voice.startswith("data:") or len(raw_voice) > 256):
+            print(f"[TTS] Rejected invalid voice value (len={len(raw_voice)})")
+        else:
+            # Strip display suffixes added by list_voices:
+            #   ElevenLabs: "Name (voice_id)"
+            #   Hume:       "Name [Hume] (uuid)" or "Name [Custom] (uuid)"
+            _el_match = _re.match(r'^.+?\s*(?:\[.*?\]\s*)?\(([A-Za-z0-9\-]+)\)\s*$', raw_voice)
+            SESSION.tts.voice = _el_match.group(1) if _el_match else raw_voice
     if "kv_scale" in data:
         val = data["kv_scale"]
         SESSION.tts.extra["kv_scale"] = float(val) if val not in (None, "", "null") else None

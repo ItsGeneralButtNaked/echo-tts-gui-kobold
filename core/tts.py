@@ -20,12 +20,13 @@ from core.logger import log
 
 TTS_PROVIDER_REGISTRY: dict[str, dict] = {
     "alltalk": {
-        "label":          "EchoTTS (local)",
-        "base_url":       "http://localhost:8000",
-        "needs_api_key":  False,
-        "needs_voice":    True,         # voice list fetched from /v1/voices
-        "api_style":      "openai_pcm", # OpenAI-compatible /v1/audio/speech → PCM stream
-        "output_format":  "pcm",
+        "label":              "EchoTTS (local)",
+        "base_url":           "http://localhost:8000",
+        "needs_api_key":      False,
+        "needs_voice":        True,
+        "api_style":          "openai_pcm",
+        "output_format":      "pcm",
+        "has_stop_endpoint":  False,   # EchoTTS has no /api/stop-generation
     },
     # "kokoro": {
     #     "label":          "Kokoro (local, low VRAM)",

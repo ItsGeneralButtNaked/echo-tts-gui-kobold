@@ -1434,6 +1434,8 @@ async function playTTS(text,gen){
   if(!text||text==='...') return;
   ensureAudio();
   stopCurrentAudio=false; _scheduledSources=[]; isPlaying=true;
+  // Wake avatar from sleep immediately when TTS starts — don't wait for analyser
+  if (_avIsSleeping) { _avIsSleeping = false; _avUpdateDisplay(); }
   document.getElementById('playing-indicator').classList.add('show');
   _ttsAbortCtrl=new AbortController();
   // Prime subtitles as soon as we start — timing anchored to _ttsPlayStartTime
@@ -1880,6 +1882,8 @@ function _fxHandleCommand(rawText) {
 async function doSend(text,resumeCtx='',isAC=false){
   if(isBusy) return;
   isBusy=true;
+  // Wake avatar from sleep on any new message
+  if (_avIsSleeping) { _avIsSleeping = false; _avUpdateDisplay(); }
   // AC calls: skip user bubble and only count the assistant SSE push (not a user push)
   _sseOwnCount += isAC ? 1 : 2;
   const myGen=_ttsGeneration;

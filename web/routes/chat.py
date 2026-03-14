@@ -35,9 +35,12 @@ chat_bp = Blueprint("chat", __name__)
 # ── TTS serialisation ─────────────────────────────────────────────────────────
 # Only one TTS inference runs at a time. _tts_cancel signals the active stream
 # to drain and exit ASAP; _tts_mutex gates the next request until the socket
-# is fully closed.
-_tts_cancel = threading.Event()
-_tts_mutex  = threading.Lock()
+# is fully closed. _tts_generation is incremented on every new /tts request —
+# a streaming generator that sees its generation number is stale knows a newer
+# request has won and self-aborts, preventing concurrent inference OOM.
+_tts_cancel     = threading.Event()
+_tts_mutex      = threading.Lock()
+_tts_generation = 0
 
 # ── SSE subscriber registry ───────────────────────────────────────────────────
 # Each entry is (queue, char_path) — char_path is the loaded_char_path at the
@@ -496,7 +499,8 @@ def chat():
 def tts_cancel():
     if request.method == "OPTIONS":
         return "", 204
-    global _tts_cancel
+    global _tts_cancel, _tts_generation
+    _tts_generation += 1
     _tts_cancel.set()
     print("[TTS] Cancel requested by client")
     # Also tell EchoTTS/AllTalk to stop its in-flight inference immediately.
@@ -504,8 +508,10 @@ def tts_cancel():
     SESSION = _get_session()
     def _stop():
         try:
-            import requests as _req
-            _req.post(f"{SESSION.tts.base_url.rstrip('/')}/api/stop-generation", timeout=1)
+            from core.tts import TTS_PROVIDER_REGISTRY
+            if TTS_PROVIDER_REGISTRY.get(SESSION.tts.provider_id, {}).get("has_stop_endpoint", False):
+                import requests as _req
+                _req.post(f"{SESSION.tts.base_url.rstrip('/')}/api/stop-generation", timeout=1)
         except Exception:
             pass
     threading.Thread(target=_stop, daemon=True).start()
@@ -525,13 +531,12 @@ def tts():
     if not text:
         return jsonify({"error": "empty"}), 400
 
-    global _tts_cancel
+    global _tts_cancel, _tts_generation
     _tts_cancel.set()
 
     # Ask local TTS server (EchoTTS/AllTalk) to abort any in-flight inference.
     # Skip for cloud API providers — they have no stop endpoint.
-    _api_style = TTS_PROVIDER_REGISTRY.get(SESSION.tts.provider_id, {}).get("api_style", "")
-    if _api_style not in ("elevenlabs", "openai_pcm_cloud"):
+    if TTS_PROVIDER_REGISTRY.get(SESSION.tts.provider_id, {}).get("has_stop_endpoint", False):
         try:
             _tts_base = SESSION.tts.base_url.rstrip("/")
             import requests as _req
@@ -547,14 +552,25 @@ def tts():
     import time as _time
     _time.sleep(0.15)
 
+    # Increment generation counter — any generator from a previous /tts call
+    # that is somehow still running will see its generation is stale and abort.
+    _tts_generation += 1
+    my_generation = _tts_generation
     my_cancel = threading.Event()
+    # Signal the old cancel event before replacing — ensures any generator
+    # still holding the old reference gets the stop signal
+    _tts_cancel.set()
     _tts_cancel = my_cancel
 
     def generate():
         try:
             for chunk in SESSION.stream_tts(text, cancel=my_cancel):
-                if my_cancel.is_set():
-                    print("[TTS] Cancelled — draining Echo-TTS connection")
+                # Stale generation check — a newer /tts arrived and won the mutex
+                if my_cancel.is_set() or _tts_generation != my_generation:
+                    if _tts_generation != my_generation:
+                        print(f"[TTS] Stale generation {my_generation} < {_tts_generation} — aborting")
+                    else:
+                        print("[TTS] Cancelled — draining Echo-TTS connection")
                     return
                 yield chunk
         except Exception as e:
