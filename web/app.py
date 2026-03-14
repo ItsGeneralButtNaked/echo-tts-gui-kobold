@@ -135,6 +135,7 @@ def create_app(config: dict) -> tuple[Flask, dict]:
         save_fn      = lambda: session.save_persistent() if session_mode[0] != "isolated" else None,
         broadcast_fn = None,    # patched below after chat routes are imported
         strip_fn     = None,
+        get_mood_fx  = lambda: bool(session.tts.extra.get("mood_fx_enabled", False)),
     )
 
     # ── Session state restore ─────────────────────────────────────────────────

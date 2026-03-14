@@ -148,6 +148,7 @@ def get_state():
         "main_wave_visible":   SESSION.tts.extra.get("main_wave_visible", True),
         "avatar_wave_visible": SESSION.tts.extra.get("avatar_wave_visible", True),
         "visual_fx_enabled":   SESSION.tts.extra.get("visual_fx_enabled", False),
+        "mood_fx_enabled":     SESSION.tts.extra.get("mood_fx_enabled",   False),
         "sub_speed":           SESSION.tts.extra.get("sub_speed", 11),
         "ui_hue":              SESSION.tts.extra.get("ui_hue", 140),
         "char_name":           os.path.splitext(os.path.basename(
@@ -296,10 +297,10 @@ def update_settings():
                 v = int(v) if v else 3
             SESSION.tts.extra[k] = v
 
-    # Wave display state
+    # Wave display state + FX toggles
     for k in ("wave_mode", "main_wave_visible", "avatar_wave_visible",
               "ui_hue", "safety_indicator_visible", "wave_amp", "wave_fade",
-              "visual_fx_enabled"):
+              "visual_fx_enabled", "mood_fx_enabled"):
         if k in data:
             SESSION.tts.extra[k] = data[k]
 

@@ -570,6 +570,13 @@ FRONTEND_HTML = r"""<!DOCTYPE html>
       <span style="font-size:10px;color:var(--text-dim);margin-left:8px">agent-triggered screen effects (avatar must be open)</span>
     </div>
 
+    <!-- Sentiment mood FX -->
+    <div class="setting-row">
+      <label>MOOD FX</label>
+      <button class="btn" id="s-mood-fx-btn" onclick="toggleMoodFX()" title="Use conversation sentiment to bias which visual effects fire">OFF</button>
+      <span style="font-size:10px;color:var(--text-dim);margin-left:8px">sentiment-biased effect selection</span>
+    </div>
+
     <!-- Character presets -->
     <div class="setting-row">
       <label>VISION</label>
@@ -2963,6 +2970,11 @@ async function loadState(){
       _visualFxEnabled = !!data.visual_fx_enabled;
       const vfb = document.getElementById('s-vis-fx-btn');
       if (vfb) { vfb.textContent = _visualFxEnabled ? 'ON' : 'OFF'; vfb.className = 'btn' + (_visualFxEnabled ? ' on' : ''); }
+    }
+    if (data.mood_fx_enabled !== undefined) {
+      _moodFxEnabled = !!data.mood_fx_enabled;
+      const mfb = document.getElementById('s-mood-fx-btn');
+      if (mfb) { mfb.textContent = _moodFxEnabled ? 'ON' : 'OFF'; mfb.className = 'btn' + (_moodFxEnabled ? ' on' : ''); }
     }
 
     // Conversation RAG restore
@@ -6122,6 +6134,7 @@ function _subClear(fade) {
 let _mainWaveVisible = true;
 let _avatarWaveVisible = true;
 let _visualFxEnabled = false;
+let _moodFxEnabled   = false;
 
 function toggleVisualFX() {
   _visualFxEnabled = !_visualFxEnabled;
@@ -6129,6 +6142,14 @@ function toggleVisualFX() {
   if (btn) { btn.textContent = _visualFxEnabled ? 'ON' : 'OFF'; btn.className = 'btn' + (_visualFxEnabled ? ' on' : ''); }
   fetch('/settings', { method: 'POST', headers: {'Content-Type':'application/json'},
     body: JSON.stringify({ visual_fx_enabled: _visualFxEnabled }) }).catch(() => {});
+}
+
+function toggleMoodFX() {
+  _moodFxEnabled = !_moodFxEnabled;
+  const btn = document.getElementById('s-mood-fx-btn');
+  if (btn) { btn.textContent = _moodFxEnabled ? 'ON' : 'OFF'; btn.className = 'btn' + (_moodFxEnabled ? ' on' : ''); }
+  fetch('/settings', { method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ mood_fx_enabled: _moodFxEnabled }) }).catch(() => {});
 }
 
 function toggleSpeakingIndicator() {

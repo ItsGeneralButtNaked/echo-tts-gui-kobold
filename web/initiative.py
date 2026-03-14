@@ -14,6 +14,67 @@ import time
 
 from web.fx import fx_payload, random_effect, EFFECTS
 
+# ── Sentiment → mood mapping ──────────────────────────────────────────────────
+# Scans recent chat text for tone markers and returns a mood string for
+# random_effect(). Falls back to "random" on no strong signal.
+
+_MOOD_KEYWORDS = {
+    "intense": [
+        "angry", "anger", "furious", "rage", "hate", "fight", "kill", "die",
+        "scream", "shout", "stop it", "enough", "urgent", "danger", "warn",
+        "threat", "attack", "hurt", "pain", "crush", "destroy", "break",
+        "frustrated", "furious", "infuriating", "livid",
+    ],
+    "mysterious": [
+        "why", "how", "wonder", "curious", "mystery", "secret", "hidden",
+        "unknown", "perhaps", "maybe", "what if", "imagine", "possible",
+        "unsure", "uncertain", "ancient", "forgotten", "riddle", "enigma",
+        "peculiar", "inexplicable",
+    ],
+    "playful": [
+        "haha", "lol", "funny", "joke", "laugh", "fun", "cute", "love",
+        "happy", "yay", "great", "awesome", "cool", "nice", "sweet",
+        "enjoy", "play", "silly", "smile", "cheer", "excited", "whee",
+        "adorable", "hilarious", "delightful",
+    ],
+    "glitchy": [
+        "code", "bug", "crash", "glitch", "hack", "terminal", "program",
+        "script", "server", "cpu", "process", "compile", "debug", "stack",
+        "overflow", "segfault", "kernel", "syntax", "exception", "runtime",
+        "malware", "exploit", "binary",
+    ],
+    "eerie": [
+        "dark", "darkness", "void", "shadow", "silence", "alone", "empty",
+        "hollow", "cold", "fear", "ghost", "dead", "death", "lost", "fade",
+        "haunt", "dread", "bleak", "despair", "nothing", "gone", "abyss",
+        "sinister", "ominous", "foreboding",
+    ],
+}
+
+# Minimum keyword hits to consider a mood signal strong enough to use
+_MOOD_THRESHOLD = 2
+
+
+def _detect_mood(chat_history: list) -> str:
+    """
+    Scan the last 8 messages for sentiment keywords.
+    Returns a mood string for random_effect(), or 'random' if no clear signal.
+    """
+    recent = chat_history[-8:] if chat_history else []
+    text = " ".join(
+        m.get("content", "").lower()
+        for m in recent
+    )
+    scores = {mood: 0 for mood in _MOOD_KEYWORDS}
+    for mood, keywords in _MOOD_KEYWORDS.items():
+        for kw in keywords:
+            if kw in text:
+                scores[mood] += 1
+    best_mood = max(scores, key=scores.get)
+    if scores[best_mood] >= _MOOD_THRESHOLD:
+        return best_mood
+    return "random"
+
 
 # ── Service-worker JS (served at /sw.js) ─────────────────────────────────────
 
@@ -220,7 +281,9 @@ class Initiative:
             # ── FX chance override: roll dice first, bypassing the opener pool ──
             # fx_chance=0 → never auto-fire FX; fx_chance=100 → always FX
             if self.fx_chance > 0 and random.randint(1, 100) <= self.fx_chance:
-                effect_name = random_effect()
+                chat_history, _, _ = self._get_context()
+                mood = _detect_mood(chat_history) if self._get_mood_fx() else "random"
+                effect_name = random_effect(mood)
                 opener = f"__FX:{effect_name}__"
             else:
                 opener = random.choice(self._OPENERS)
@@ -229,7 +292,9 @@ class Initiative:
             if opener.startswith("__FX:"):
                 effect_name = opener[5:].rstrip("_")
                 if effect_name == "random":
-                    effect_name = random_effect()
+                    chat_history, _, _ = self._get_context()
+                    mood = _detect_mood(chat_history) if self._get_mood_fx() else "random"
+                    effect_name = random_effect(mood)
 
                 # Broadcast the visual effect immediately
                 self._broadcast_fn(fx_payload(effect_name))
@@ -296,10 +361,11 @@ class Initiative:
             self._set_busy(False)
 
     # Callbacks wired by ecko_web ─────────────────────────────────────────────
-    def wire(self, *, get_busy, set_busy, get_context, save_fn, broadcast_fn, strip_fn):
-        self._get_busy    = get_busy
-        self._set_busy    = set_busy
-        self._get_context = get_context   # () -> (chat_history, memory, llm)
-        self._save_fn     = save_fn       # () -> None
-        self._broadcast_fn = broadcast_fn # (payload_str) -> None
-        self._strip_fn    = strip_fn      # (text) -> text
+    def wire(self, *, get_busy, set_busy, get_context, save_fn, broadcast_fn, strip_fn, get_mood_fx=None):
+        self._get_busy     = get_busy
+        self._set_busy     = set_busy
+        self._get_context  = get_context   # () -> (chat_history, memory, llm)
+        self._save_fn      = save_fn       # () -> None
+        self._broadcast_fn = broadcast_fn  # (payload_str) -> None
+        self._strip_fn     = strip_fn      # (text) -> text
+        self._get_mood_fx  = get_mood_fx or (lambda: False)
