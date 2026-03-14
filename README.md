@@ -17,7 +17,7 @@ The goal of ECKO is to provide a **fast, self-hosted conversational AI experienc
 
 It started as a simple streaming TTS frontend and has evolved into a **complete conversational stack** with character systems, memory, knowledge retrieval, and a visual effects engine.
 
-* Ecko is designed to work first and foremost with Echo TTS and KoboldCPP. I've been impressed with MistralAI's LLM API performance and other providers (LLM and TTS) are also being added for fallback and user choice. Streaming audio may not be available under these configurations without paid subscription or even available at all. Ecko's intended low latency experience will take a hit but it's perfectly usable.
+* Ecko is designed to work first and foremost with Echo TTS and KoboldCPP. I've been impressed with MistralAI's LLM API performance and other providers (LLM and TTS) are also being added for fallback, user choice and people without GPUs. Streaming audio may not be available under these configurations without paid subscription or even available at all. Ecko's intended low latency experience will take a hit but remain completely functional.
 
 ---
 
@@ -29,11 +29,12 @@ It started as a simple streaming TTS frontend and has evolved into a **complete 
 
 ECKO integrates with **Echo-TTS** for low-latency streaming voice playback.
 
+* Exceptional audio quality
 * Real-time streaming speech
 * Character voice presets
 * Volume and gain control
 * Optional audio processing
-* IR reverb support
+* Convolution reverb with user customisable impulse response
 
 Unlike most TTS frontends, audio playback begins **immediately while generation is still happening**.
 
@@ -508,6 +509,12 @@ Future improvements include:
 
 ---
 
+# Known Issues
+
+* Echo-TTS does have a couple of minor output issues in rare edge cases - shouty, podscast style snippets etc.
+* Minor UI state issues - non critical but quick fixes so will be done soon.
+
+---
 # License
 
 See repository license file.
