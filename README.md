@@ -25,7 +25,7 @@ It started as a simple streaming TTS frontend and has evolved into a **complete 
 
 ## Streaming Text-to-Speech
 
-![Screenshot](screenshots/settings-voice.png)
+![Screenshot](screenshots/settings-voice-resize.png)
 
 ECKO integrates with **Echo-TTS** for low-latency streaming voice playback.
 
@@ -58,7 +58,7 @@ Features include:
 
 ## Character System
 
-![Screenshot](screenshots/settings-char.png)
+![Screenshot](screenshots/settings-char-resize.png)
 
 ECKO supports **per-character configuration**, allowing each personality to define:
 
@@ -90,7 +90,7 @@ Features:
 
 ## Persistent Memory
 
-![Screenshot](screenshots/settings-memory.png)
+![Screenshot](screenshots/settings-memory-resize.png)
 
 ECKO includes a **long-term memory system**.
 
