@@ -130,6 +130,8 @@ rag/
 
 ## Visual Effects Engine
 
+![Screenshot](screenshots/ecko-fx-resize.gif)
+
 ECKO includes a full **canvas-based visual effects system** that fires on the avatar overlay. Effects are tinted to match the UI hue and run as animated canvas overlays above the avatar.
 
 ### Triggering Effects
