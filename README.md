@@ -41,6 +41,8 @@ Unlike most TTS frontends, audio playback begins **immediately while generation 
 
 ## LLM Chat Integration
 
+![Screenshot](screenshots/settings-llm-cropped.png)
+
 ECKO connects to a local LLM server such as:
 
 * **KoboldCPP**
