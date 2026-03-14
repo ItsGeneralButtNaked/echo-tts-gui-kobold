@@ -2331,7 +2331,7 @@ function _applyAvatarSettings(d) {
     const pBtn   = document.getElementById('av-pixel-btn');
     const hudBtn = document.getElementById('av-pixel-hud-btn');
     if (pBtn)   { pBtn.textContent   = _avPixelEnabled ? 'ON' : 'OFF'; pBtn.className   = 'btn' + (_avPixelEnabled ? ' on' : ''); }
-    if (hudBtn) { hudBtn.textContent = _avPixelEnabled ? '⬛ PIXEL' : 'PIXEL'; hudBtn.className = 'btn' + (_avPixelEnabled ? ' on' : ''); }
+    if (hudBtn) { hudBtn.textContent = _avPixelEnabled ? '≋ BLUR' : 'BLUR'; hudBtn.className = 'btn' + (_avPixelEnabled ? ' on' : ''); }
     const bBtn = document.getElementById('av-pixel-bilinear-btn');
     const lbl  = document.getElementById('av-pixel-mode-label');
     if (bBtn) { bBtn.textContent = _avPixelBilinear ? 'SOFT' : 'EDGE'; bBtn.className = 'btn' + (_avPixelBilinear ? ' on' : ''); }
