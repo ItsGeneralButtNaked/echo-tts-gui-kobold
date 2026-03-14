@@ -248,6 +248,8 @@ A configurable sleep window suppresses initiative and auto-continue firing betwe
 
 ## ASCII Art Library
 
+![Screenshot](screenshots/ecko-ascii-resize.gif)
+
 ECKO includes a **local ASCII art library** that serves pre-made art pieces when the character would otherwise ask the LLM to generate ASCII art — avoiding token cost and poor quality LLM-generated output.
 
 ### File Format
@@ -283,6 +285,8 @@ Type either of these in chat to serve directly from the library (no LLM call):
 ---
 
 ## Code and Python Display
+
+![Screenshot](screenshots/ecko-python-resize.gif)
 
 The avatar overlay includes a **code display panel** that renders fenced code blocks with a typewriter reveal effect. This is used for:
 
