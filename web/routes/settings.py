@@ -136,6 +136,8 @@ def get_state():
         "crush_sr":        SESSION.tts.extra.get("crush_sr", 4),
         "dist_wet":        SESSION.tts.extra.get("dist_wet", 0),
         "dist_drive":      SESSION.tts.extra.get("dist_drive", 20),
+        "revgate_wet":     SESSION.tts.extra.get("revgate_wet", 0),
+        "revgate_length":  SESSION.tts.extra.get("revgate_length", 400),
         "ir_b64":          SESSION.tts.extra.get("ir_b64", None),
         "ir_name":         SESSION.tts.extra.get("ir_name", ""),
         "master_gain":     SESSION.tts.extra.get("master_gain", 1.5),
@@ -149,6 +151,7 @@ def get_state():
         "avatar_wave_visible": SESSION.tts.extra.get("avatar_wave_visible", True),
         "visual_fx_enabled":   SESSION.tts.extra.get("visual_fx_enabled", False),
         "mood_fx_enabled":     SESSION.tts.extra.get("mood_fx_enabled",   False),
+        "barge_in_enabled":    SESSION.tts.extra.get("barge_in_enabled",  True),
         "sub_speed":           SESSION.tts.extra.get("sub_speed", 11),
         "ui_hue":              SESSION.tts.extra.get("ui_hue", 140),
         "char_name":           os.path.splitext(os.path.basename(
@@ -169,6 +172,10 @@ def get_state():
         "rag_chunks":   len(rag.chunks),
         "rag_semantic": rag._use_semantic and rag._index is not None,
         "rag_cuda":     SESSION.tts.extra.get("rag_cuda", False),
+        # STT settings
+        "stt_provider": SESSION.tts.extra.get("stt_provider", "faster-whisper"),
+        "stt_model":    SESSION.tts.extra.get("stt_model", "base"),
+        "stt_cuda":     SESSION.tts.extra.get("stt_cuda", False),
         # Conversation RAG
         "conv_rag_enabled":   _get_conv_rag().enabled,
         "conv_rag_threshold": _get_conv_rag().threshold,
@@ -203,6 +210,7 @@ _FX_KEYS = (
     "ringmod_wet", "ringmod_freq",
     "ir_b64", "ir_name",
     "dist_wet", "dist_drive",
+    "revgate_wet", "revgate_length",
 )
 
 
@@ -304,7 +312,7 @@ def update_settings():
     # Wave display state + FX toggles
     for k in ("wave_mode", "main_wave_visible", "avatar_wave_visible",
               "ui_hue", "safety_indicator_visible", "wave_amp", "wave_fade",
-              "visual_fx_enabled", "mood_fx_enabled"):
+              "visual_fx_enabled", "mood_fx_enabled", "barge_in_enabled"):
         if k in data:
             SESSION.tts.extra[k] = data[k]
 
@@ -364,9 +372,32 @@ def update_settings():
         old_cuda = SESSION.tts.extra.get("rag_cuda", False)
         SESSION.tts.extra["rag_cuda"] = new_cuda
         rag.use_cuda = new_cuda
-        if new_cuda != old_cuda and rag._embedder is not None:
-            rag._embedder = None   # force reload with new device on next build
-            print(f"[RAG] CUDA={'on' if new_cuda else 'off'} — embedder cleared, will reload on next index build")
+    # STT settings
+    _stt_changed = False
+    if "stt_provider" in data:
+        SESSION.tts.extra["stt_provider"] = str(data["stt_provider"])
+        _stt_changed = True
+    if "stt_model" in data:
+        SESSION.tts.extra["stt_model"] = str(data["stt_model"])
+        _stt_changed = True
+    if "stt_api_key" in data:
+        SESSION.tts.extra["stt_api_key"] = str(data["stt_api_key"])
+    if "stt_api_url" in data:
+        SESSION.tts.extra["stt_api_url"] = str(data["stt_api_url"])
+    if "stt_cuda" in data:
+        new_cuda = bool(data["stt_cuda"])
+        SESSION.tts.extra["stt_cuda"] = new_cuda
+        _stt_changed = True
+    if _stt_changed:
+        import core.stt as _stt_mod
+        _stt_mod._whisper_model = None
+        _model  = SESSION.tts.extra.get("stt_model", "base")
+        _device = "cuda" if SESSION.tts.extra.get("stt_cuda", False) else "cpu"
+        print(f"[STT] Settings changed — will reload as {_model!r} on {_device}")
+        import threading as _t
+        _t.Thread(target=_stt_mod.get_whisper,
+                  kwargs={"model": _model, "device": _device},
+                  daemon=True).start()
 
     # Conversation RAG
     if "conv_rag_enabled" in data or "conv_rag_threshold" in data:

@@ -123,10 +123,14 @@ class LLMCaller:
     # ── memory injection helper ──────────────────────────────────────────────
 
     def _inject(self, system_prompt: str, user_text: str) -> str:
-        """Apply the registered memory/RAG injection hook if present."""
+        """Apply the registered memory/RAG injection hook if present, then append current time."""
+        result = system_prompt
         if callable(self.memory_inject_fn):
-            return self.memory_inject_fn(system_prompt, user_text)
-        return system_prompt
+            result = self.memory_inject_fn(result, user_text)
+        # Append current local time so the model always knows when it is
+        from datetime import datetime as _dt
+        result = result + f"\n[Current local time: {_dt.now().strftime('%A %H:%M')} — state this directly if asked what time it is.]"
+        return result
 
     # ── public entry point ───────────────────────────────────────────────────
 
@@ -167,8 +171,8 @@ class LLMCaller:
                      image_b64: str = None, image_mime: str = "image/jpeg",
                      search_context: str = "") -> str:
         prompt = ""
-        if self.system_prompt:
-            sp = self._inject(self.system_prompt, user_text)
+        sp = self._inject(self.system_prompt, user_text)
+        if sp:
             prompt += f"[SYSTEM]\n{sp}\n\n"
 
         for m in history[-self.max_history:]:
@@ -241,8 +245,8 @@ class LLMCaller:
                      image_b64: str = None, image_mime: str = "image/jpeg",
                      search_context: str = "") -> str:
         messages = []
-        if self.system_prompt:
-            sp = self._inject(self.system_prompt, user_text)
+        sp = self._inject(self.system_prompt, user_text)
+        if sp:
             print(f"[LLM] openai system_prompt len={len(sp)} inject_delta={len(sp)-len(self.system_prompt)}")
             messages.append({"role": "system", "content": sp})
         # Inject web search results as a system message so the model treats

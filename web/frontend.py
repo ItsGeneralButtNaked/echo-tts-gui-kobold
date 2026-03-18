@@ -312,6 +312,7 @@ FRONTEND_HTML = r"""<!DOCTYPE html>
       <button class="stab" onclick="switchTab('memory')">MEMORY</button>
       <button class="stab" onclick="switchTab('safety')">SAFETY</button>
       <button class="stab" onclick="switchTab('avatar')">AVATAR</button>
+      <button class="stab" onclick="switchTab('stt')">STT</button>
     </div>
     <div id="settings-body">
 
@@ -432,6 +433,15 @@ FRONTEND_HTML = r"""<!DOCTYPE html>
       <input type="range" id="reverb-predelay" min="0" max="80" step="1" value="20" style="flex:1;min-width:40px" oninput="updateReverb()">
       <span id="reverb-predelay-val" style="font-size:10px;color:var(--text-dim);min-width:28px;flex-shrink:0">20ms</span>
     </div>
+    <div class="setting-row fx-row" id="fx-row-revgate">
+      <button class="fx-tog" id="fxtog-revgate" onclick="toggleFxRow('revgate')" title="Reverse gated reverb on/off">●</button>
+      <span class="fx-lbl">REV GATE</span>
+      <input type="range" id="revgate-wet" min="0" max="1" step="0.01" value="0.4" style="flex:2;min-width:60px" oninput="updateRevGate()">
+      <span id="revgate-wet-val" style="font-size:10px;color:var(--text-dim);min-width:28px;flex-shrink:0">40%</span>
+      <span class="fx-lbl">TAIL</span>
+      <input type="range" id="revgate-length" min="100" max="800" step="50" value="400" style="flex:1;min-width:40px" oninput="updateRevGate()">
+      <span id="revgate-length-val" style="font-size:10px;color:var(--text-dim);min-width:28px;flex-shrink:0">400ms</span>
+    </div>
     <div class="setting-row fx-row" id="fx-row-delay">
       <button class="fx-tog on" id="fxtog-delay" onclick="toggleFxRow('delay')" title="Delay on/off">●</button>
       <span class="fx-lbl">DLY WET</span>
@@ -497,6 +507,7 @@ FRONTEND_HTML = r"""<!DOCTYPE html>
       <button class="btn" style="font-size:10px;padding:3px 8px" onclick="applyFxPreset('alien')">ALIEN</button>
       <button class="btn" style="font-size:10px;padding:3px 8px" onclick="applyFxPreset('tape')">TAPE</button>
       <button class="btn" style="font-size:10px;padding:3px 8px" onclick="applyFxPreset('cavern')">CAVERN</button>
+      <button class="btn" style="font-size:10px;padding:3px 8px" onclick="applyFxPreset('ghost')">GHOST</button>
     </div>
       </div>
 
@@ -875,6 +886,44 @@ FRONTEND_HTML = r"""<!DOCTYPE html>
     </div>
       </div>
 
+      <!-- ── STT tab ── -->
+      <div class="stab-pane" id="stab-stt">
+        <div class="setting-row">
+          <label>STT PROV</label>
+          <select id="s-stt-provider" onchange="_saveSttSettings()">
+            <option value="faster-whisper">Faster Whisper (local)</option>
+            <option value="assemblyai" disabled>AssemblyAI (API)</option>
+            <option value="deepgram" disabled>Deepgram (API)</option>
+            <option value="openai_stt" disabled>OpenAI Whisper (API)</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <label>MODEL</label>
+          <select id="s-stt-model" onchange="_saveSttSettings()">
+            <option value="tiny">tiny</option>
+            <option value="base" selected>base</option>
+            <option value="small">small</option>
+            <option value="medium">medium</option>
+            <option value="large-v3">large-v3</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <label>API KEY</label>
+          <input type="password" id="s-stt-api-key" placeholder="sk-... (cloud providers)" style="flex:1" oninput="_saveSttSettings()" disabled>
+        </div>
+        <div class="setting-row">
+          <label>API URL</label>
+          <input type="text" id="s-stt-api-url" placeholder="https://api.assemblyai.com" style="flex:1" oninput="_saveSttSettings()" disabled>
+        </div>
+        <hr class="section-divider">
+        <div class="setting-row">
+          <label></label>
+          <label style="min-width:auto;margin-right:4px;font-size:10px" title="Use CUDA GPU for Whisper inference — faster but uses VRAM">CUDA</label>
+          <input type="checkbox" id="s-stt-cuda" style="accent-color:var(--green)" onchange="_saveSttCuda()">
+          <span style="font-size:11px;color:var(--text-dim);margin-left:10px;flex:1" id="stt-cuda-note">Requires CUDA torch. Keeps Whisper on CPU if unchecked.</span>
+        </div>
+      </div>
+
       <!-- ── shared footer (always visible) ── -->
       <div id="settings-footer" style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px;display:flex;justify-content:flex-end;gap:8px;flex-shrink:0">
         <button class="btn" id="btn-save-footer" onclick="saveCurrentCharacter()" disabled title="Load a character first" style="margin-right:auto;font-size:11px;padding:5px 10px">💾 SAVE CHAR</button>
@@ -932,6 +981,7 @@ FRONTEND_HTML = r"""<!DOCTYPE html>
       <div id="avatar-controls-row">
         <button class="btn on" id="av-ac-indicator" onclick="toggleAC()" title="Auto-continue — click to toggle">AC: ON</button>
         <button class="btn" id="av-init-indicator" onclick="toggleInitiative()" title="Initiative — click to toggle">◈ INIT</button>
+        <button class="btn on" id="av-bargein-indicator" onclick="toggleBargeIn()" title="Barge-in — allow interrupting TTS mid-playback">⚡ INT</button>
         <button class="btn" id="avatar-mic-btn" onclick="toggleOpenMic()" title="Open-mic VAD mode">VAD</button>
         <button class="btn" id="avatar-mic-mute-btn" onclick="toggleMicMute()" title="Mute/unmute microphone" disabled style="opacity:0.35">🎙 MUTE</button>
         <button class="btn" onclick="stopAudio()">STOP</button>
@@ -981,6 +1031,7 @@ FRONTEND_HTML = r"""<!DOCTYPE html>
     <div id="controls-row">
       <button class="btn on" id="ac-indicator" onclick="toggleAC()" title="Auto-continue — click to toggle">AC: ON</button>
       <button class="btn" id="init-indicator" onclick="toggleInitiative()" title="Initiative — click to toggle">◈ INIT</button>
+      <button class="btn on" id="bargein-indicator" onclick="toggleBargeIn()" title="Barge-in — allow interrupting TTS mid-playback">⚡ INT</button>
       <button class="btn" id="open-mic-btn" onclick="toggleOpenMic()" title="Open-mic VAD mode">VAD</button>
       <button class="btn" id="mic-mute-btn" onclick="toggleMicMute()" title="Mute/unmute microphone" disabled style="opacity:0.35">🎙 MUTE</button>
       <button class="btn" onclick="stopAudio()">STOP</button>
@@ -1000,6 +1051,7 @@ FRONTEND_HTML = r"""<!DOCTYPE html>
 // ── State ──
 let voices=[], currentVoice='', masterGain=1.5;
 let acEnabled=true, acMode='standard';
+let _bargeInEnabled=true;  // true=allow interrupt TTS, false=wait for completion
 let isPlaying=false, isBusy=false;
 let waveAmp=1.0;
 let waveFade=0.25;   // smoothing alpha — how quickly wave decays to silence
@@ -1019,7 +1071,7 @@ let _irBuffer=null;         // loaded ConvolverNode impulse response
 let _irB64=null;            // base64 of raw IR WAV for persistence
 let _irName='';             // filename for display
 let _fxEnabled=false;       // master FX on/off
-const fxRowEnabled={reverb:true,delay:true,crush:true,chorus:true,ring:true,dist:true};
+const fxRowEnabled={reverb:true,delay:true,crush:true,chorus:true,ring:true,dist:true,revgate:false};
 
 function toggleFxRow(name){
   fxRowEnabled[name]=!fxRowEnabled[name];
@@ -1069,8 +1121,37 @@ async function loadIRFromB64(b64, name){
   }catch(e){console.error('[IR] Failed to decode saved IR:',e);}
 }
 
+// ── Reverse gated reverb IR builder ──────────────────────────────────────────
+// Generates a synthetic IR that creates the classic 80s reverse gated reverb:
+// the reverb tail swells INTO the transient rather than decaying after it.
+// Technique: exponential swell + hard gate cutoff + time-reverse of the buffer.
+function _buildRevGateIR(lengthMs) {
+  if (!audioCtx) return null;
+  const sr      = audioCtx.sampleRate;
+  const length  = Math.max(0.05, (lengthMs || 400) / 1000);
+  const frames  = Math.floor(sr * length);
+  const buf     = audioCtx.createBuffer(2, frames, sr);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    for (let i = 0; i < frames; i++) {
+      const t      = i / frames;                        // 0 → 1
+      // Swell envelope: slow exponential rise
+      const swell  = Math.pow(t, 2.5);
+      // Hard gate: cut off sharply at the end (last 8% drops to zero)
+      const gate   = t > 0.92 ? Math.pow(1 - (t - 0.92) / 0.08, 3) : 1.0;
+      // Noise with slight density roll-off for diffusion
+      const noise  = (Math.random() * 2 - 1) * (1 - t * 0.3);
+      d[i] = noise * swell * gate * 0.5;
+    }
+    // Reverse the buffer — this is what makes it pre-reverb
+    d.reverse();
+  }
+  return buf;
+}
+
 // FX nodes
 let _reverbNode=null,_reverbDryGain=null,_reverbWetGain=null,_preDelayNode=null;
+let _revGateNode=null,_revGateWetGain=null,_revGateDryGain=null,_revGateMerge=null;
 let _delayNode=null,_delayFeedback=null,_delayFilter=null,_delayWetGain=null;
 let _chorusDelay=null,_chorusLFO=null,_chorusLFOGain=null,_chorusDryGain=null,_chorusWetGain=null,_chorusMerge=null;
 let _ringCarrier=null,_ringMod=null,_ringWetGain=null,_ringDryGain=null,_ringMerge=null;
@@ -1085,6 +1166,7 @@ function _buildReverbGraph(){
   // Tear down all old nodes safely
   for(const n of [_distNode,_distDryGain,_distWetGain,_distMerge,
                    _reverbNode,_reverbDryGain,_reverbWetGain,_preDelayNode,
+                   _revGateNode,_revGateWetGain,_revGateDryGain,_revGateMerge,
                    _delayNode,_delayFeedback,_delayFilter,_delayWetGain,
                    _chorusDelay,_chorusLFO,_chorusLFOGain,_chorusDryGain,_chorusWetGain,_chorusMerge,
                    _ringCarrier,_ringMod,_ringWetGain,_ringDryGain,_ringMerge,
@@ -1102,6 +1184,8 @@ function _buildReverbGraph(){
   // Read slider values — wet sliders use S-curve; gated by per-row enable toggles
   const reverbWet  = fxRowEnabled.reverb  ? _scurve(parseFloat(document.getElementById('reverb-wet').value||0))  : 0;
   const preMs      = parseFloat(document.getElementById('reverb-predelay').value||0)/1000;
+  const revGateWet = fxRowEnabled.revgate ? _scurve(parseFloat(document.getElementById('revgate-wet').value||0))  : 0;
+  const revGateLen = parseFloat(document.getElementById('revgate-length').value||400);
   const delMs      = parseFloat(document.getElementById('delay-time').value||0)/1000;
   const delWet     = fxRowEnabled.delay   ? _scurve(parseFloat(document.getElementById('delay-wet').value||0))   : 0;
   const fb         = parseFloat(document.getElementById('delay-feedback').value||0.35);
@@ -1209,6 +1293,24 @@ function _buildReverbGraph(){
     chainIn=_distMerge;
   }
 
+  // ── 2c. REVERSE GATE REVERB ───────────────────────────────────────────────
+  // Generates a reversed swelling IR and runs it through a ConvolverNode.
+  // The swell builds INTO the transient — classic 80s reverse gated reverb.
+  if (revGateWet > 0) {
+    const rgBuf = _buildRevGateIR(revGateLen);
+    if (rgBuf) {
+      _revGateNode     = audioCtx.createConvolver();
+      _revGateNode.buffer = rgBuf;
+      _revGateDryGain  = audioCtx.createGain(); _revGateDryGain.gain.value = 1 - revGateWet;
+      _revGateWetGain  = audioCtx.createGain(); _revGateWetGain.gain.value = revGateWet;
+      _revGateMerge    = audioCtx.createGain();
+      chainIn.connect(_revGateDryGain);  _revGateDryGain.connect(_revGateMerge);
+      chainIn.connect(_revGateNode);     _revGateNode.connect(_revGateWetGain);
+      _revGateWetGain.connect(_revGateMerge);
+      chainIn = _revGateMerge;
+    }
+  }
+
   // ── 3. REVERB ─────────────────────────────────────────────────────────────
   if(_irBuffer && reverbWet>0){
     _preDelayNode=audioCtx.createDelay(0.1); _preDelayNode.delayTime.value=preMs;
@@ -1252,6 +1354,13 @@ function updateReverb(){
   const v=parseFloat(document.getElementById('reverb-wet').value||0);
   document.getElementById('reverb-wet-val').textContent=Math.round(_scurve(v)*100)+'%';
   document.getElementById('reverb-predelay-val').textContent=document.getElementById('reverb-predelay').value+'ms';
+  if(_fxEnabled) _buildReverbGraph();
+}
+function updateRevGate(){
+  const v=parseFloat(document.getElementById('revgate-wet').value||0);
+  const l=parseFloat(document.getElementById('revgate-length').value||400);
+  document.getElementById('revgate-wet-val').textContent=Math.round(_scurve(v)*100)+'%';
+  document.getElementById('revgate-length-val').textContent=l+'ms';
   if(_fxEnabled) _buildReverbGraph();
 }
 function updateDelay(){
@@ -1343,6 +1452,12 @@ function applyFxPreset(name){
             chorus_wet:0,chorus_depth:0.005,chorus_rate:1.2,
             ringmod_wet:0.08,ringmod_freq:40,crush_wet:0,crush_bits:8,crush_sr:1,
             dist_wet:0.05,dist_drive:8},
+    // Ghost: reverse gated reverb — swell builds into transient, ethereal 80s texture
+    ghost:{fx:true, reverb_wet:0.25,reverb_predelay:10,delay_wet:0.12,delay_time:280,delay_feedback:0.38,
+           chorus_wet:0.18,chorus_depth:0.009,chorus_rate:0.4,
+           ringmod_wet:0,ringmod_freq:120,crush_wet:0,crush_bits:8,crush_sr:1,
+           dist_wet:0,dist_drive:20,
+           revgate_wet:0.55,revgate_length:450},
   };
   const p=presets[name]; if(!p) return;
   // Apply to sliders
@@ -1352,8 +1467,25 @@ function applyFxPreset(name){
   set('chorus-wet',p.chorus_wet); set('chorus-depth',p.chorus_depth); set('chorus-rate',p.chorus_rate);
   set('ringmod-wet',p.ringmod_wet); set('ringmod-freq',p.ringmod_freq);
   set('crush-wet',p.crush_wet); set('crush-bits',p.crush_bits); set('crush-sr',p.crush_sr);
-  set('dist-wet',p.dist_wet); set('dist-drive',p.dist_drive);  // Fire update fns to refresh displays and rebuild chain
-  updateReverb(); updateDelay(); updateChorus(); updateRingMod(); updateCrush(); updateDist();
+  set('dist-wet',p.dist_wet); set('dist-drive',p.dist_drive);
+  if(p.revgate_wet  !== undefined) set('revgate-wet',    p.revgate_wet);
+  if(p.revgate_length !== undefined) set('revgate-length', p.revgate_length);
+  // Enable revgate row if preset uses it
+  if(p.revgate_wet > 0 && !fxRowEnabled.revgate){
+    fxRowEnabled.revgate = true;
+    const tog = document.getElementById('fxtog-revgate');
+    const row = document.getElementById('fx-row-revgate');
+    if(tog) tog.className='fx-tog on';
+    if(row) row.classList.remove('fx-off');
+  } else if((!p.revgate_wet || p.revgate_wet === 0) && fxRowEnabled.revgate){
+    fxRowEnabled.revgate = false;
+    const tog = document.getElementById('fxtog-revgate');
+    const row = document.getElementById('fx-row-revgate');
+    if(tog) tog.className='fx-tog';
+    if(row) row.classList.add('fx-off');
+  }
+  // Fire update fns to refresh displays and rebuild chain
+  updateReverb(); updateRevGate(); updateDelay(); updateChorus(); updateRingMod(); updateCrush(); updateDist();
   // Set FX master toggle
   if(p.fx!==_fxEnabled){
     _fxEnabled=p.fx;
@@ -1371,6 +1503,7 @@ function applyFxPreset(name){
     ringmod_wet:p.ringmod_wet,ringmod_freq:p.ringmod_freq,
     crush_wet:p.crush_wet,crush_bits:p.crush_bits,crush_sr:p.crush_sr,
     dist_wet:p.dist_wet,dist_drive:p.dist_drive,pitch_semitones:p.pitch_semitones,
+    revgate_wet:p.revgate_wet||0,revgate_length:p.revgate_length||400,
   })}).catch(()=>{});
 }
 
@@ -1733,6 +1866,8 @@ async function sendText(){
   const inp=document.getElementById('msg-input');
   const t=inp.value.trim();
   if(!t) return;
+  // Barge-in OFF: block while audio is playing, only allow when idle
+  if(!_bargeInEnabled && isPlaying) return;
   if(isBusy && !isPlaying) return; // LLM still fetching, can't interrupt
   inp.value=''; inp.style.height='auto';
   // Await the /tts/cancel acknowledgement before proceeding — ensures the server
@@ -1743,7 +1878,16 @@ async function sendText(){
   // Usage: !fx           → random effect + agent quip
   //        !fx matrix    → specific effect + agent quip
   //        !fx list      → show available effects in chat (no LLM call)
-  if (_avOverlayOpen && /^!fx(\s|$)/i.test(t)) { _fxHandleCommand(t); return; }
+  if (/^!fx(\s|$)/i.test(t)) {
+    // In avatar view: full handling. In bubble view: list works, effects show hint.
+    const arg = (t.trim().split(/\s+/)[1] || '').toLowerCase();
+    if (!_avOverlayOpen && arg !== 'list' && arg !== 'help') {
+      addBubble('assistant', '!fx effects require the avatar overlay to be open. Use !fx list to see available effects.');
+      return;
+    }
+    _fxHandleCommand(t);
+    return;
+  }
   doSend(t);
 }
 
@@ -1827,8 +1971,12 @@ function _fxHandleCommand(rawText) {
       '  !fx morse      — morse flash',
       '  !fx thermal    — thermal vision',
       '  !fx digital    — digital rain colour',
-    ].join('\n');
-    addBubble('assistant', lines);
+    ];
+    const bub = addBubble('assistant', '');
+    bub.style.whiteSpace = 'pre';
+    bub.style.fontFamily = 'var(--font-mono)';
+    bub.style.fontSize   = '11px';
+    bub.textContent      = lines.join('\n');
     return;
   }
 
@@ -2082,6 +2230,16 @@ function toggleAC(){
   const _avAc=document.getElementById('av-ac-indicator');
   if(_avAc){_avAc.textContent='AC: '+(acEnabled?'ON':'OFF');_avAc.className='btn'+(acEnabled?' on':'');}
   fetch('/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({auto_continue_enabled:acEnabled})});
+}
+function toggleBargeIn(){
+  _bargeInEnabled=!_bargeInEnabled;
+  const on=_bargeInEnabled;
+  ['bargein-indicator','av-bargein-indicator'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el){el.textContent=on?'⚡ INT':'⏸ INT';el.className='btn'+(on?' on':'');}
+  });
+  fetch('/settings',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({barge_in_enabled:on})}).catch(()=>{});
 }
 function onProviderChange(){
   const pid=document.getElementById('s-provider').value;
@@ -2640,6 +2798,26 @@ function _saveRagCuda() {
     body: JSON.stringify({ rag_cuda: cuda }) }).catch(() => {});
 }
 
+function _saveSttCuda() {
+  const cuda = document.getElementById('s-stt-cuda').checked;
+  fetch('/settings', { method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ stt_cuda: cuda }) }).catch(() => {});
+}
+
+function _saveSttSettings() {
+  const provider = document.getElementById('s-stt-provider').value;
+  const model    = document.getElementById('s-stt-model').value;
+  const apiKey   = document.getElementById('s-stt-api-key').value.trim();
+  const apiUrl   = document.getElementById('s-stt-api-url').value.trim();
+  // Enable API fields for cloud providers
+  const isLocal  = provider === 'faster-whisper';
+  document.getElementById('s-stt-api-key').disabled = isLocal;
+  document.getElementById('s-stt-api-url').disabled = isLocal;
+  fetch('/settings', { method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ stt_provider: provider, stt_model: model,
+                           stt_api_key: apiKey, stt_api_url: apiUrl }) }).catch(() => {});
+}
+
 async function saveRag(){
   const name=document.getElementById('s-rag-save-name').value.trim();
   if(!name){alert('Enter a filename first.');return;}
@@ -2951,6 +3129,9 @@ async function loadState(){
     else if(_fxEnabled) _buildReverbGraph();
     if(data.dist_wet!==undefined){ document.getElementById('dist-wet').value=data.dist_wet; updateDist(); }
     if(data.dist_drive!==undefined){ document.getElementById('dist-drive').value=data.dist_drive; document.getElementById('dist-drive-val').textContent=data.dist_drive; }
+    if(data.revgate_wet!==undefined){ document.getElementById('revgate-wet').value=data.revgate_wet; }
+    if(data.revgate_length!==undefined){ document.getElementById('revgate-length').value=data.revgate_length; }
+    if(data.revgate_wet!==undefined||data.revgate_length!==undefined){ updateRevGate(); }
 
     // Wave display state
     if (data.wave_mode !== undefined) {
@@ -2979,6 +3160,14 @@ async function loadState(){
       _moodFxEnabled = !!data.mood_fx_enabled;
       const mfb = document.getElementById('s-mood-fx-btn');
       if (mfb) { mfb.textContent = _moodFxEnabled ? 'ON' : 'OFF'; mfb.className = 'btn' + (_moodFxEnabled ? ' on' : ''); }
+    }
+    if (data.barge_in_enabled !== undefined) {
+      _bargeInEnabled = !!data.barge_in_enabled;
+      const on = _bargeInEnabled;
+      ['bargein-indicator','av-bargein-indicator'].forEach(id=>{
+        const el=document.getElementById(id);
+        if(el){el.textContent=on?'⚡ INT':'⏸ INT';el.className='btn'+(on?' on':'');}
+      });
     }
 
     // Conversation RAG restore
@@ -3016,6 +3205,15 @@ async function loadState(){
     }
     const semCb=document.getElementById('s-rag-semantic');if(semCb&&data.rag_semantic!==undefined)semCb.checked=!!data.rag_semantic;
     const cudaCb=document.getElementById('s-rag-cuda');if(cudaCb&&data.rag_cuda!==undefined)cudaCb.checked=!!data.rag_cuda;
+
+    // STT settings
+    if(data.stt_provider!==undefined){const el=document.getElementById('s-stt-provider');if(el)el.value=data.stt_provider;}
+    if(data.stt_model!==undefined){const el=document.getElementById('s-stt-model');if(el)el.value=data.stt_model;}
+    if(data.stt_cuda!==undefined){const el=document.getElementById('s-stt-cuda');if(el)el.checked=!!data.stt_cuda;}
+    // Enable API fields only for cloud providers
+    {const isLocal=(document.getElementById('s-stt-provider')||{}).value==='faster-whisper';
+     const keyEl=document.getElementById('s-stt-api-key');if(keyEl)keyEl.disabled=isLocal;
+     const urlEl=document.getElementById('s-stt-api-url');if(urlEl)urlEl.disabled=isLocal;}
 
     // Memory status
     memoryEnabled=data.memory_enabled||false;

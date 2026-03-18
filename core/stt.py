@@ -55,17 +55,27 @@ def transcribe_audio(audio_bytes: bytes, mime_type: str = "audio/webm") -> str:
         tmp.write(audio_bytes)
         tmp_path = tmp.name
     wav_path = tmp_path + ".wav"
+    # Resolve device and model from session settings if available
+    try:
+        from web.routes.settings import SESSION as _sess
+        _stt_cuda  = _sess.tts.extra.get("stt_cuda", False)
+        _stt_model = _sess.tts.extra.get("stt_model", "base")
+        import torch as _torch
+        _dev = "cuda" if (_stt_cuda and _torch.cuda.is_available()) else "cpu"
+    except Exception:
+        _dev = "cpu"
+        _stt_model = "base"
     try:
         subprocess.run(
             ["ffmpeg", "-y", "-i", tmp_path, "-ar", "16000", "-ac", "1", wav_path],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True,
         )
-        model = get_whisper()
+        model = get_whisper(model=_stt_model, device=_dev)
         segs, _ = model.transcribe(wav_path, language="en", vad_filter=True)
         return " ".join(s.text.strip() for s in segs).strip()
     except FileNotFoundError:
         try:
-            model = get_whisper()
+            model = get_whisper(model=_stt_model, device=_dev)
             segs, _ = model.transcribe(tmp_path, language="en", vad_filter=True)
             return " ".join(s.text.strip() for s in segs).strip()
         except Exception as e:

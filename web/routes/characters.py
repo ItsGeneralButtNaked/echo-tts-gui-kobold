@@ -152,7 +152,13 @@ def load_character():
     SESSION.llm.api_key       = char.get("api_key",       SESSION.llm.api_key)
     SESSION.llm.agent_id      = char.get("agent_id",      SESSION.llm.agent_id)
     SESSION.llm.model         = char.get("model",         SESSION.llm.model)
-    SESSION.llm.system_prompt = char.get("system_prompt", SESSION.llm.system_prompt)
+    from datetime import datetime as _dt
+    _now = _dt.now()
+    _time_str     = _now.strftime("%H:%M")
+    _datetime_str = _now.strftime("%A %d %B %Y %H:%M")
+    def _sub_time(s: str) -> str:
+        return s.replace("{{local_time}}", _time_str).replace("{{local_datetime}}", _datetime_str)
+    SESSION.llm.system_prompt = _sub_time(char.get("system_prompt", SESSION.llm.system_prompt))
     if "max_reply_tokens" in char:
         SESSION.llm.max_reply_tokens = int(char["max_reply_tokens"])
     if "max_history" in char:

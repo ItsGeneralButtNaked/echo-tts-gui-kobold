@@ -1,0 +1,9 @@
+This is the best way I've found to get everything working on Windows and requires Windows Subsystem for Linux.
+
+https://learn.microsoft.com/en-us/windows/wsl/about
+
+The WSL Network config script will give your WSL environment a static IP and allows Ecko to connect on localhost.
+
+If you have no compatible GPU just run scripts 1-3 and create free accounts on MistralAI and Elevenlabs as they are well supported and have generous free tier allowances.
+
+

@@ -102,7 +102,19 @@ if __name__ == "__main__":
     print()
 
     from core.stt import get_whisper
-    threading.Thread(target=get_whisper, daemon=True).start()
+    try:
+        from web.routes.settings import SESSION as _sess
+        _stt_model  = _sess.tts.extra.get("stt_model", "base")
+        _stt_cuda   = _sess.tts.extra.get("stt_cuda", False)
+        import torch as _torch
+        _stt_device = "cuda" if (_stt_cuda and _torch.cuda.is_available()) else "cpu"
+    except Exception:
+        import torch as _torch
+        _stt_model  = "base"
+        _stt_device = "cuda" if _torch.cuda.is_available() else "cpu"
+    threading.Thread(target=get_whisper,
+                     kwargs={"model": _stt_model, "device": _stt_device},
+                     daemon=True).start()
 
     app.run(
         host="0.0.0.0",
