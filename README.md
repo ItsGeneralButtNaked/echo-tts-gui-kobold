@@ -521,7 +521,7 @@ The system is intentionally modular so each component can evolve independently.
 Future improvements include:
 
 * Better documentation
-* Test Echo-TTS-API Docker container on Windows for full Windows support
+* More default character avatars
 * ASCII art animation frames (flip-book style multi-frame display)
 * Mini games in the code panel
 * User-editable initiative and AC prompt pools
@@ -554,7 +554,7 @@ This project builds upon the work of several open-source communities:
 
 Without them this project would not exist.
 
-Extra shoutout to the bigbrains in the OpenSesame Discord server - I literally wouldn't have even started slop without you guys both laughing at my initial noob stack and helping me with the odd nudge in the right direction :P
+Extra shoutout to the bigbrains in the OpenSesame Discord server - I literally wouldn't have even started this slop without you guys both laughing at my initial noob stack and helping me with the odd nudge in the right direction.
 
 ---
 
