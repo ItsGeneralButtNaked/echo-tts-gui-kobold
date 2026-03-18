@@ -352,7 +352,7 @@ The system is fully local and customizable.
 
 ---
 
-# Installation
+# Linux Installation
 
 ## 1 Clone the repository
 
@@ -387,6 +387,29 @@ source venv/bin/activate
 pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
 ```
+
+If you have CUDA GPU then also:
+
+```
+pip uninstall -y faiss-cpu
+pip install faiss-gpu-cu12
+```
+
+---
+
+# Windows Installation
+
+## 1 Run batch installers
+
+Right click on each script and run as administrator.
+
+This is the best way I've found to get everything working on Windows and requires Windows Subsystem for Linux.
+
+https://learn.microsoft.com/en-us/windows/wsl/about
+
+The WSL Network config script will give your WSL environment a static IP and allows Ecko to connect on localhost.
+
+If you have no compatible GPU just run scripts 1-3 and create free accounts on MistralAI and Elevenlabs as they are well supported and have generous free tier allowances.
 
 ---
 
@@ -474,10 +497,8 @@ ecko/
 | Platform | Status                |
 | -------- | --------------------- |
 | Linux    | Fully supported       |
-| Windows  | Fully Supported*      |
+| Windows  | Fully Supported       |
 | MacOS    | Not officially tested |
-
-\* ECKO works fine on Windows but Echo-TTS-API Docker container on Win10/11 is still being tested.
 
 ---
 
