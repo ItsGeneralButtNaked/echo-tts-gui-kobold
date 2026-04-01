@@ -57,6 +57,16 @@ def restore_session_state(
     # ── initiative ────────────────────────────────────────────────────────────
     if "initiative_fx_chance" in ex:
         initiative.fx_chance = max(0, min(100, int(ex["initiative_fx_chance"])))
+    if "initiative_img_chance" in ex:
+        initiative.img_chance = max(0, min(100, int(ex["initiative_img_chance"])))
+    if "initiative_video_chance" in ex:
+        initiative.video_chance = max(0, min(100, int(ex["initiative_video_chance"])))
+    if "initiative_ascii_chance" in ex:
+        initiative.ascii_chance = max(0, min(100, int(ex["initiative_ascii_chance"])))
+    if "initiative_terminal_chance" in ex:
+        initiative.terminal_chance = max(0, min(100, int(ex["initiative_terminal_chance"])))
+    if "initiative_glitch_chance" in ex:
+        initiative.glitch_chance = max(0, min(100, int(ex["initiative_glitch_chance"])))
     if "sleep_timer_enabled" in ex:
         v = bool(ex["sleep_timer_enabled"])
         initiative.sleep_timer_enabled = v

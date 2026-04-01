@@ -10,7 +10,7 @@ Routes:
 """
 
 import os
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_from_directory
 
 from core.llm import PROVIDER_REGISTRY
 from core.tts import TTS_PROVIDER_REGISTRY
@@ -31,16 +31,24 @@ _get_chars_mod    = None
 _get_guest_config = None  # () -> (GUEST_MODE, GUEST_CONFIG)
 _get_active_mode  = None  # () -> ContextMode
 _set_active_mode  = None  # (name: str) -> None
+_get_art_lib      = None
+_art_lib_path     = ""
+_get_image_lib    = None
+_image_dir        = ""
+_get_video_lib    = None
+_video_dir        = ""
 
 
 def wire(*, get_session, get_rag, get_memory, get_safety, get_initiative, get_conv_rag,
          get_session_mode, set_session_mode, get_isolated_llm,
          get_chars_mod, get_guest_config, get_active_mode=None, set_active_mode=None,
-         get_art_lib=None, art_lib_path=""):
+         get_art_lib=None, art_lib_path="",
+         get_image_lib=None, image_dir="",
+         get_video_lib=None, video_dir=""):
     global _get_session, _get_rag, _get_memory, _get_safety, _get_initiative, _get_conv_rag
     global _get_session_mode, _set_session_mode, _get_isolated_llm
     global _get_chars_mod, _get_guest_config, _get_active_mode, _set_active_mode
-    global _get_art_lib, _art_lib_path
+    global _get_art_lib, _art_lib_path, _get_image_lib, _image_dir, _get_video_lib, _video_dir
     _get_session      = get_session
     _get_rag          = get_rag
     _get_memory       = get_memory
@@ -56,6 +64,10 @@ def wire(*, get_session, get_rag, get_memory, get_safety, get_initiative, get_co
     _set_active_mode  = set_active_mode
     _get_art_lib      = get_art_lib or (lambda: None)
     _art_lib_path     = art_lib_path
+    _get_image_lib    = get_image_lib or (lambda: None)
+    _image_dir        = image_dir
+    _get_video_lib    = get_video_lib or (lambda: None)
+    _video_dir        = video_dir
 
 
 # ── /state ────────────────────────────────────────────────────────────────────
@@ -89,6 +101,8 @@ def get_state():
         "agent_id":          SESSION.llm.agent_id,
         "model":             SESSION.llm.model,
         "system_prompt":     SESSION.llm.system_prompt,
+        "first_message":     SESSION.tts.extra.get("first_message", ""),
+        "first_message_tts": SESSION.tts.extra.get("first_message_tts", False),
         "max_reply_tokens":  SESSION.llm.max_reply_tokens,
         "max_history":       SESSION.llm.max_history,
         "llm_label":         llm_label,
@@ -111,7 +125,12 @@ def get_state():
         "initiative_enabled":    SESSION.tts.extra.get("initiative_enabled", _initiative.enabled),
         "initiative_mode":       SESSION.tts.extra.get("initiative_mode",    _initiative.mode),
         "initiative_next_secs":  max(0, _initiative.status()["secs_remaining"]),
-        "initiative_fx_chance":  SESSION.tts.extra.get("initiative_fx_chance", _initiative.fx_chance),
+        "initiative_fx_chance":      SESSION.tts.extra.get("initiative_fx_chance",      _initiative.fx_chance),
+        "initiative_img_chance":     SESSION.tts.extra.get("initiative_img_chance",     _initiative.img_chance),
+        "initiative_video_chance":   SESSION.tts.extra.get("initiative_video_chance",   _initiative.video_chance),
+        "initiative_ascii_chance":   SESSION.tts.extra.get("initiative_ascii_chance",   _initiative.ascii_chance),
+        "initiative_terminal_chance":SESSION.tts.extra.get("initiative_terminal_chance",_initiative.terminal_chance),
+        "initiative_glitch_chance":  SESSION.tts.extra.get("initiative_glitch_chance",  _initiative.glitch_chance),
         "initiative_in_sleep":   _initiative.status()["in_sleep_window"],
         "sleep_timer_enabled":   SESSION.tts.extra.get("sleep_timer_enabled", _initiative.sleep_timer_enabled),
         "sleep_start":           SESSION.tts.extra.get("sleep_start", _initiative.sleep_start),
@@ -182,7 +201,9 @@ def get_state():
         "conv_rag_file":      _get_conv_rag().filename,
         "conv_rag_exists":    _get_conv_rag().status()["exists"],
         # ASCII art library
-        "art_lib_count": (_get_art_lib().count if _get_art_lib() else 0),
+        "art_lib_count":   (_get_art_lib().count   if _get_art_lib()   else 0),
+        "image_lib_count": (_get_image_lib().count if _get_image_lib() else 0),
+        "video_lib_count": (_get_video_lib().count if _get_video_lib() else 0),
         # Memory
         "memory_enabled": SESSION.tts.extra.get("memory_enabled", _memory.enabled),
         "memory_count":   len(_memory.entries),
@@ -232,6 +253,10 @@ def update_settings():
     for field in ("base_url", "agent_id", "model", "system_prompt"):
         if field in data:
             setattr(SESSION.llm, field, data[field])
+    if "first_message" in data:
+        SESSION.tts.extra["first_message"] = data["first_message"]
+    if "first_message_tts" in data:
+        SESSION.tts.extra["first_message_tts"] = bool(data["first_message_tts"])
     # Only update api_key when a real key string is supplied.
     # Guard against the masked boolean ("true"/"false") being echoed back by
     # loadState → applySettings when the user opens settings without re-entering
@@ -347,6 +372,26 @@ def update_settings():
         val = int(data["initiative_fx_chance"])
         _initiative.fx_chance = max(0, min(100, val))
         SESSION.tts.extra["initiative_fx_chance"] = _initiative.fx_chance
+    if "initiative_img_chance" in data:
+        val = int(data["initiative_img_chance"])
+        _initiative.img_chance = max(0, min(100, val))
+        SESSION.tts.extra["initiative_img_chance"] = _initiative.img_chance
+    if "initiative_video_chance" in data:
+        val = int(data["initiative_video_chance"])
+        _initiative.video_chance = max(0, min(100, val))
+        SESSION.tts.extra["initiative_video_chance"] = _initiative.video_chance
+    if "initiative_ascii_chance" in data:
+        val = int(data["initiative_ascii_chance"])
+        _initiative.ascii_chance = max(0, min(100, val))
+        SESSION.tts.extra["initiative_ascii_chance"] = _initiative.ascii_chance
+    if "initiative_terminal_chance" in data:
+        val = int(data["initiative_terminal_chance"])
+        _initiative.terminal_chance = max(0, min(100, val))
+        SESSION.tts.extra["initiative_terminal_chance"] = _initiative.terminal_chance
+    if "initiative_glitch_chance" in data:
+        val = int(data["initiative_glitch_chance"])
+        _initiative.glitch_chance = max(0, min(100, val))
+        SESSION.tts.extra["initiative_glitch_chance"] = _initiative.glitch_chance
 
     # Sleep timer (shared by initiative + auto-continue)
     if "sleep_timer_enabled" in data:
@@ -451,6 +496,27 @@ def clear_all():
     memory.enabled = was_enabled
     memory.save()
 
+    # Re-inject first message now that history is empty
+    first_msg = SESSION.tts.extra.get("first_message", "").strip()
+    if first_msg:
+        SESSION.chat_history = [{"role": "assistant", "content": first_msg}]
+        SESSION.save_persistent()
+        _char_path = SESSION.tts.extra.get("loaded_char_path", "")
+        if _char_path:
+            import os as _os, json as _json
+            _char_name = _os.path.splitext(_os.path.basename(_char_path))[0]
+            _mem_dir = getattr(memory, "_dir", None)
+            if _mem_dir:
+                _bubbles_path = _os.path.join(_mem_dir, f"{_char_name}_bubbles.json")
+                try:
+                    with open(_bubbles_path, "w", encoding="utf-8") as _bf:
+                        _json.dump(SESSION.chat_history, _bf, ensure_ascii=False)
+                except Exception as _be:
+                    print(f"[BUBBLES] Clear-all bubble-save failed: {_be}")
+        print("[FIRST_MSG] Re-injected opening message after clear_all")
+        return jsonify({"ok": True, "first_message": first_msg,
+                        "first_message_tts": SESSION.tts.extra.get("first_message_tts", False)})
+
     return jsonify({"ok": True})
 
 
@@ -467,6 +533,29 @@ def reset_conv():
             isolated[ip].reset_conv()
     else:
         SESSION.reset()
+
+    # Re-inject first message on a now-empty history
+    first_msg = SESSION.tts.extra.get("first_message", "").strip()
+    if first_msg:
+        SESSION.chat_history = [{"role": "assistant", "content": first_msg}]
+        SESSION.save_persistent()
+        # Keep the per-character bubble file in sync so restarts restore correctly
+        _char_path = SESSION.tts.extra.get("loaded_char_path", "")
+        if _char_path:
+            import os as _os, json as _json
+            _char_name = _os.path.splitext(_os.path.basename(_char_path))[0]
+            _mem_dir = getattr(_get_memory(), "_dir", None)
+            if _mem_dir:
+                _bubbles_path = _os.path.join(_mem_dir, f"{_char_name}_bubbles.json")
+                try:
+                    with open(_bubbles_path, "w", encoding="utf-8") as _bf:
+                        _json.dump(SESSION.chat_history, _bf, ensure_ascii=False)
+                except Exception as _be:
+                    print(f"[BUBBLES] Reset bubble-save failed: {_be}")
+        print("[FIRST_MSG] Re-injected opening message after reset")
+        return jsonify({"ok": True, "first_message": first_msg,
+                        "first_message_tts": SESSION.tts.extra.get("first_message_tts", False)})
+
     return jsonify({"ok": True})
 
 
@@ -482,6 +571,36 @@ def guest_config():
     })
 
 
+# ── /images/<path> ───────────────────────────────────────────────────────────
+# Serve image library files by relative path so gen_images URLs are lightweight
+# strings rather than base64 blobs.  Path is validated to stay inside _image_dir.
+
+@settings_bp.route("/images/<path:rel_path>")
+def serve_image(rel_path):
+    if not _image_dir:
+        return "Image library not configured", 404
+    safe_root = os.path.realpath(_image_dir)
+    target    = os.path.realpath(os.path.join(_image_dir, rel_path))
+    if not target.startswith(safe_root + os.sep):
+        return "Forbidden", 403
+    directory = os.path.dirname(target)
+    filename  = os.path.basename(target)
+    return send_from_directory(directory, filename)
+
+
+@settings_bp.route("/videos/<path:rel_path>")
+def serve_video(rel_path):
+    if not _video_dir:
+        return "Video library not configured", 404
+    safe_root = os.path.realpath(_video_dir)
+    target    = os.path.realpath(os.path.join(_video_dir, rel_path))
+    if not target.startswith(safe_root + os.sep):
+        return "Forbidden", 403
+    directory = os.path.dirname(target)
+    filename  = os.path.basename(target)
+    return send_from_directory(directory, filename)
+
+
 # ── /ascii_art/reload ─────────────────────────────────────────────────────────
 
 @settings_bp.route("/ascii_art/reload", methods=["POST"])
@@ -491,4 +610,34 @@ def ascii_art_reload():
         return jsonify({"ok": False, "error": "art library not configured"}), 500
     count = lib.reload(_art_lib_path)
     print(f"[ASCII ART] Reloaded — {count} piece(s) from {_art_lib_path!r}")
+    return jsonify({"ok": True, "count": count})
+
+
+# ── /image_lib/reload ─────────────────────────────────────────────────────────
+
+@settings_bp.route("/image_lib/reload", methods=["POST"])
+def image_lib_reload():
+    lib = _get_image_lib()
+    if lib is None:
+        return jsonify({"ok": False, "error": "image library not configured"}), 500
+    data = request.get_json(force=True) or {}
+    char_name = data.get("char_name", "").strip()
+    count = lib.reload(char_name) if char_name else lib.reload()
+    print(f"[IMAGE_LIB] Reloaded — {count} image(s)" +
+          (f" for '{char_name}'" if char_name else f" from {_image_dir!r}"))
+    return jsonify({"ok": True, "count": count})
+
+
+# ── /video_lib/reload ─────────────────────────────────────────────────────────
+
+@settings_bp.route("/video_lib/reload", methods=["POST"])
+def video_lib_reload():
+    lib = _get_video_lib()
+    if lib is None:
+        return jsonify({"ok": False, "error": "video library not configured"}), 500
+    data = request.get_json(force=True) or {}
+    char_name = data.get("char_name", "").strip()
+    count = lib.reload(char_name) if char_name else lib.reload()
+    print(f"[VIDEO_LIB] Reloaded — {count} video(s)" +
+          (f" for '{char_name}'" if char_name else f" from {_video_dir!r}"))
     return jsonify({"ok": True, "count": count})

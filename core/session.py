@@ -125,9 +125,9 @@ class Session:
     # ── auto-continue ────────────────────────────────────────────────────────
 
     def _ac_interval(self) -> int:
-        if self.auto_continue_mode == "aggressive": return random.randint(8, 15)
+        if self.auto_continue_mode == "aggressive": return random.randint(12, 20)
         if self.auto_continue_mode == "relaxed":    return random.randint(45, 75)
-        return random.randint(25, 50)
+        return random.randint(30, 60)
 
     def _ac_in_sleep_window(self) -> bool:
         """Return True if current hour is inside the AC sleep window."""
@@ -184,18 +184,14 @@ class Session:
             if self._ac_stop: return
             if len(self.chat_history) < 2:
                 self.start_ac_timer(); return
-            # Respect sleep window — reschedule silently
             if self._ac_in_sleep_window():
                 self.start_ac_timer(); return
-            # If busy, keep retrying every 2s until free
             if self.busy:
                 if not self._ac_stop:
                     self._ac_timer = threading.Timer(2, fire)
                     self._ac_timer.daemon = True
                     self._ac_timer.start()
                 return
-            # Final check — re-verify busy hasn't been set in the tiny window
-            # between the check above and now, then claim it atomically
             if self.busy:
                 if not self._ac_stop:
                     self._ac_timer = threading.Timer(2, fire)

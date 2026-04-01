@@ -35,6 +35,8 @@ SAFETY_DIR    = os.path.join(_HERE, "safety")
 SESSION_FILE  = os.path.join(_HERE, "ecko_session.json")
 MEMORY_DIR    = os.path.join(_HERE, "memories")
 ASCII_ART_DIR = os.path.join(_HERE, "ascii_art")
+IMAGE_DIR     = os.path.join(_HERE, "images")
+VIDEO_DIR     = os.path.join(_HERE, "videos")
 
 
 # ── One-time migration: move existing RAG files into subdirs ──────────────────
@@ -67,6 +69,8 @@ app, _services = create_app({
     "safety_dir":     SAFETY_DIR,
     "memory_dir":     MEMORY_DIR,
     "ascii_art_dir":  ASCII_ART_DIR,
+    "image_dir":      IMAGE_DIR,
+    "video_dir":      VIDEO_DIR,
     "guest_cfg_path": os.path.join(_HERE, "guest_config.json"),
 })
 

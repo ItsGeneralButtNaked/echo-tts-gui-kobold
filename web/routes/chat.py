@@ -14,6 +14,7 @@ Routes:
 """
 
 import json
+import os
 import queue
 import threading
 import time
@@ -30,7 +31,57 @@ from core.tts import TTS_PROVIDER_REGISTRY
 from core.websearch import detect_search_intent, extract_query, brave_search, build_search_context
 from web.sanitise import strip_leaked_context
 
+# ── Image / video caption context extractor ───────────────────────────────────
+# Reads optional [IMAGE_CONTEXT: ...] or [VIDEO_CONTEXT: ...] blocks from the
+# active system prompt so character cards can guide how caption replies are framed.
+# Blocks can span multiple lines and are stripped before being injected into the
+# caption prompt. Unknown / missing blocks return an empty string.
+#
+# Example system prompt lines:
+#   [IMAGE_CONTEXT: All images you send are selfies you took yourself.
+#    Any male in the image is the user. Refer to him by name if you know it.]
+#   [VIDEO_CONTEXT: Videos you send are clips you recorded. Treat them as your own.]
+
+import re as _re_ctx
+
+def _extract_media_context(system_prompt: str, kind: str = "image") -> str:
+    """
+    Extract the content of an [IMAGE_CONTEXT: ...] or [VIDEO_CONTEXT: ...] block
+    from the system prompt. Returns stripped text or '' if not present.
+    kind: 'image' or 'video'
+    """
+    tag = "IMAGE_CONTEXT" if kind == "image" else "VIDEO_CONTEXT"
+    match = _re_ctx.search(
+        rf'\[{tag}:\s*([\s\S]*?)\]',
+        system_prompt or "",
+        _re_ctx.IGNORECASE,
+    )
+    if match:
+        return match.group(1).strip()
+    return ""
+
 chat_bp = Blueprint("chat", __name__)
+
+# ── Mood vocabulary ────────────────────────────────────────────────────────────
+# Fixed emoji → label mapping. The LLM embeds *mood: 😊* in replies.
+# Stripped before display, stored as metadata on history entries.
+_MOOD_VOCAB = {
+    "😊": "warm/happy",
+    "😈": "teasing/playful-dark",
+    "🥺": "vulnerable/soft",
+    "💢": "irritated/sharp",
+    "😴": "low energy/tired",
+    "🤔": "thoughtful/curious",
+}
+_MOOD_EMOJIS = set(_MOOD_VOCAB.keys())
+
+# ── Per-turn feedback injection ────────────────────────────────────────────────
+# Thumbs up/down on a bubble writes a one-shot note here.
+# It is prepended to the *next* real user turn's effective_text, then cleared.
+# TODO: expand to per-direction dropdown options (too long / out of character /
+#       boring / too short / wrong tone) for finer-grained soft injection.
+_feedback_note: str = ""
+_feedback_lock = threading.Lock()
 
 # ── TTS serialisation ─────────────────────────────────────────────────────────
 # Only one TTS inference runs at a time. _tts_cancel signals the active stream
@@ -99,14 +150,17 @@ _get_initiative = None   # () -> Initiative
 _get_conv_rag   = None   # () -> ConvRAG
 _get_rag        = None   # () -> RAGMemory
 _get_frontend_html = None  # () -> str
+_get_art_lib = None
+_get_image_lib = None
+_get_video_lib = None
 
 
 def wire(*, get_session, get_safety, get_memory, get_client_llm,
          get_session_mode, get_initiative, get_conv_rag, get_rag,
-         get_frontend_html, get_art_lib=None):
+         get_frontend_html, get_art_lib=None, get_image_lib=None, get_video_lib=None):
     global _get_session, _get_safety, _get_memory, _get_client_llm
     global _get_session_mode, _get_initiative, _get_conv_rag, _get_rag
-    global _get_frontend_html, _get_art_lib
+    global _get_frontend_html, _get_art_lib, _get_image_lib, _get_video_lib
     _get_session      = get_session
     _get_safety       = get_safety
     _get_memory       = get_memory
@@ -117,6 +171,8 @@ def wire(*, get_session, get_safety, get_memory, get_client_llm,
     _get_rag          = get_rag
     _get_frontend_html = get_frontend_html
     _get_art_lib      = get_art_lib or (lambda: None)
+    _get_image_lib    = get_image_lib or (lambda: None)
+    _get_video_lib    = get_video_lib or (lambda: None)
 
 
 # ── /chat ─────────────────────────────────────────────────────────────────────
@@ -231,7 +287,9 @@ def chat():
     _ART_OPENERS = ("*sends random ascii art*", "*sends favorite ascii art*")
     if original_user_text.strip().lower() in _ART_OPENERS:
         _art_lib = _get_art_lib()
-        _art_piece = _art_lib.pick_fenced() if _art_lib else None
+        _char_path = SESSION.tts.extra.get("loaded_char_path", "")
+        _char_name = os.path.splitext(os.path.basename(_char_path))[0] if _char_path else ""
+        _art_piece = _art_lib.pick_fenced(_char_name) if _art_lib else None
         if _art_piece:
             # Push bubble to SSE subscribers and return — no LLM call needed
             push_chat_event("assistant", _art_piece)
@@ -242,6 +300,74 @@ def chat():
             print("[ASCII ART] Served from library, skipped LLM")
             return jsonify({"reply": _art_piece, "generated_images": []})
         # Library empty — fall through to LLM as before
+
+    # ── Image library short-circuit ───────────────────────────────────────────
+    # Serve a static image from the images/ folder on explicit openers.
+    # Character-specific images come first (images/<char_name>/); general images
+    # are the fallback.  Intercept BEFORE mutex/busy so it's as fast as ASCII art.
+    _IMG_OPENERS = ("*sends image*", "*sends random image*", "*sends a picture*",
+                    "*sends character image*", "*sends photo*")
+    _img_opener_text = original_user_text.strip().lower()
+
+    # Detect parameterised keyword opener: *sends image: beach sunset*
+    # Strip the surrounding asterisks and parse the keyword payload.
+    import re as _re_img
+    _img_kw_match = _re_img.match(
+        r'^\*sends image:\s*(.+?)\*$', _img_opener_text
+    )
+    _img_kw_list = (
+        [w for w in _re_img.findall(r'[a-z]+', _img_kw_match.group(1)) if len(w) > 2]
+        if _img_kw_match else []
+    )
+    _is_img_opener = (_img_opener_text in _IMG_OPENERS) or bool(_img_kw_match)
+
+    # Pre-pick the image early (fast, no LLM) so we have it ready.
+    # The caption LLM call happens inside the main busy gate below.
+    _img_pre_result = None
+    if _is_img_opener:
+        _img_lib = _get_image_lib()
+        if _img_lib and _img_lib.count > 0:
+            _char_path = SESSION.tts.extra.get("loaded_char_path", "")
+            _char_name = os.path.splitext(os.path.basename(_char_path))[0] if _char_path else ""
+            _char_only = "character" in _img_opener_text and not _img_kw_match
+            if _img_kw_list:
+                _img_pre_result = _img_lib.pick_by_keywords(_img_kw_list, _char_name)
+            elif _char_only:
+                _img_pre_result = _img_lib.pick_random(_char_name)
+            else:
+                _img_pre_result = _img_lib.pick_random(_char_name)
+        # If no image found, fall through to normal LLM path
+        if not _img_pre_result:
+            _is_img_opener = False
+
+    # ── Video library short-circuit ───────────────────────────────────────────
+    _VID_OPENERS = ("*sends video*", "*sends random video*", "*sends a video*",
+                    "*sends character video*", "*sends clip*")
+    _vid_opener_text = original_user_text.strip().lower()
+    import re as _re_vid
+    _vid_kw_match = _re_vid.match(r'^\*sends video:\s*(.+?)\*$', _vid_opener_text)
+    _vid_kw_list = (
+        [w for w in _re_vid.findall(r'[a-z]+', _vid_kw_match.group(1)) if len(w) > 2]
+        if _vid_kw_match else []
+    )
+    _is_vid_opener = (_vid_opener_text in _VID_OPENERS) or bool(_vid_kw_match)
+
+    # Pre-pick video early (fast, no LLM)
+    _vid_pre_result = None
+    if _is_vid_opener:
+        _vid_lib = _get_video_lib()
+        if _vid_lib and _vid_lib.count > 0:
+            _char_path = SESSION.tts.extra.get("loaded_char_path", "")
+            _char_name = os.path.splitext(os.path.basename(_char_path))[0] if _char_path else ""
+            _char_only = "character" in _vid_opener_text and not _vid_kw_match
+            if _vid_kw_list:
+                _vid_pre_result = _vid_lib.pick_by_keywords(_vid_kw_list, _char_name)
+            elif _char_only:
+                _vid_pre_result = _vid_lib.pick_random(_char_name)
+            else:
+                _vid_pre_result = _vid_lib.pick_random(_char_name)
+        if not _vid_pre_result:
+            _is_vid_opener = False
 
     # Signal any active TTS stream to stop and wait for mutex.
     # After the mutex is released we also fire an EchoTTS /api/stop-generation
@@ -262,6 +388,109 @@ def chat():
 
     try:
         llm = _get_client_llm() if SESSION_MODE == "isolated" else SESSION.llm
+
+        # ── Image opener — caption LLM call runs here inside the busy gate ────
+        if _is_img_opener and _img_pre_result:
+            _img_uri     = _img_pre_result["uri"]
+            _img_matched = _img_pre_result["matched_keywords"]
+            _img_random  = _img_pre_result["is_random"]
+            _file_tags   = _img_pre_result.get("tags", [])
+            _file_stems  = _img_pre_result.get("stem_words", [])
+            _file_ctx    = _file_tags if _file_tags else _file_stems
+            _ctx_words   = _img_kw_list + [w for w in _file_ctx if w not in _img_kw_list]
+            _ctx_str     = ", ".join(_ctx_words[:20]) if _ctx_words else ""
+            _img_cap_ctx = _extract_media_context(getattr(llm, "system_prompt", "") or "", "image")
+            _img_cap_ctx_line = f" Additional context for how to frame this: {_img_cap_ctx}" if _img_cap_ctx else ""
+            if _ctx_str:
+                _cap_prompt = (
+                    f"[System: You have decided to share an image with the user. "
+                    f"The image contains or relates to: {_ctx_str}. "
+                    f"Write one or two sentences in character, from YOUR perspective "
+                    f"as the one sending it — as if you chose this image to share. "
+                    f"Reference what's in it naturally and personally. "
+                    f"Do not describe it as if you received it. "
+                    f"No filenames, no asterisk actions, no meta-commentary."
+                    f"{_img_cap_ctx_line}]"
+                )
+            else:
+                _cap_prompt = (
+                    f"[System: You have decided to share a random image with the user. "
+                    f"Write one or two sentences in character, from YOUR perspective "
+                    f"as the one sending it — as if you picked something to show them. "
+                    f"Keep it casual and personal. "
+                    f"No filenames, no asterisk actions, no meta-commentary."
+                    f"{_img_cap_ctx_line}]"
+                )
+            try:
+                _cap_raw = llm.chat(_cap_prompt, SESSION.chat_history[-6:])
+                _caption = (_cap_raw.get("reply", "") if isinstance(_cap_raw, dict)
+                            else _cap_raw).strip() or "*shares an image*"
+            except Exception as _cap_err:
+                print(f"[IMAGE_LIB] Caption LLM failed: {_cap_err}")
+                _caption = "*shares an image*"
+            _img_store_url = f"/images/{_img_pre_result['rel_path']}"
+            if not is_ac and not is_fx_quip:
+                push_chat_event("user", original_user_text)
+            push_chat_event("assistant", _caption)
+            SESSION.chat_history.append({"role": "assistant", "content": _caption,
+                                         "gen_images": [_img_store_url]})
+            _initiative.reschedule()
+            if SESSION_MODE != "isolated":
+                SESSION.save_persistent()
+            print(f"[IMAGE_LIB] Served image (random={_img_random}, matched={_img_matched})")
+            return jsonify({"reply": _caption, "generated_images": [_img_uri]})
+        # ─────────────────────────────────────────────────────────────────────
+
+        # ── Video opener — caption LLM call runs here inside the busy gate ───
+        if _is_vid_opener and _vid_pre_result:
+            _vid_url     = _vid_pre_result["url"]
+            _vid_matched = _vid_pre_result["matched_keywords"]
+            _vid_random  = _vid_pre_result["is_random"]
+            _file_tags   = _vid_pre_result.get("tags", [])
+            _file_stems  = _vid_pre_result.get("stem_words", [])
+            _file_ctx    = _file_tags if _file_tags else _file_stems
+            _ctx_words   = _vid_kw_list + [w for w in _file_ctx if w not in _vid_kw_list]
+            _ctx_str     = ", ".join(_ctx_words[:20]) if _ctx_words else ""
+            _vid_cap_ctx = _extract_media_context(getattr(llm, "system_prompt", "") or "", "video")
+            _vid_cap_ctx_line = f" Additional context for how to frame this: {_vid_cap_ctx}" if _vid_cap_ctx else ""
+            if _ctx_str:
+                _cap_prompt = (
+                    f"[System: You have decided to share a video clip with the user. "
+                    f"The video contains or relates to: {_ctx_str}. "
+                    f"Write one or two sentences in character, from YOUR perspective "
+                    f"as the one sending it — as if you chose this clip to share. "
+                    f"Reference what's in it naturally and personally. "
+                    f"Do not describe it as if you received it. "
+                    f"No filenames, no asterisk actions, no meta-commentary."
+                    f"{_vid_cap_ctx_line}]"
+                )
+            else:
+                _cap_prompt = (
+                    f"[System: You have decided to share a random video clip with the user. "
+                    f"Write one or two sentences in character, from YOUR perspective "
+                    f"as the one sending it — as if you picked something to show them. "
+                    f"Keep it casual and personal. "
+                    f"No filenames, no asterisk actions, no meta-commentary."
+                    f"{_vid_cap_ctx_line}]"
+                )
+            try:
+                _cap_raw = llm.chat(_cap_prompt, SESSION.chat_history[-6:])
+                _caption = (_cap_raw.get("reply", "") if isinstance(_cap_raw, dict)
+                            else _cap_raw).strip() or "*shares a video*"
+            except Exception as _cap_err:
+                print(f"[VIDEO_LIB] Caption LLM failed: {_cap_err}")
+                _caption = "*shares a video*"
+            if not is_ac and not is_fx_quip:
+                push_chat_event("user", original_user_text)
+            push_chat_event("assistant", _caption)
+            SESSION.chat_history.append({"role": "assistant", "content": _caption,
+                                         "gen_videos": [_vid_url]})
+            _initiative.reschedule()
+            if SESSION_MODE != "isolated":
+                SESSION.save_persistent()
+            print(f"[VIDEO_LIB] Served video (random={_vid_random}, matched={_vid_matched})")
+            return jsonify({"reply": _caption, "generated_videos": [_vid_url]})
+        # ─────────────────────────────────────────────────────────────────────
 
         # Layer 1: tripwire check (skip only for genuine server-rewritten AC directives)
         safety_result = _safety.check_message(user_text) if not _skip_safety else {"action": "pass"}
@@ -294,6 +523,15 @@ def chat():
         effective_text = user_text
         if _safety_note and _safety.score_level() == "alert":
             effective_text = f"{_safety_note}\n\nUser said: {user_text}"
+
+        # ── One-shot feedback injection ───────────────────────────────────────
+        global _feedback_note
+        with _feedback_lock:
+            _pending_feedback = _feedback_note
+            _feedback_note = ""
+        if _pending_feedback and not is_ac and not is_fx_quip:
+            effective_text = f"{_pending_feedback}\n\n{effective_text}"
+        # ─────────────────────────────────────────────────────────────────────
 
         # ── Parallel retrieval: web search + memory/RAG injection ────────────
         # Web search (network, up to 8 s) and the memory_inject_fn chain
@@ -413,26 +651,100 @@ def chat():
         except Exception as _fx_err:
             print(f"[FX] Tag-detect error: {_fx_err}")
         # ─────────────────────────────────────────────────────────────────────
-        generated_images = []
+
+        # ── Mood tag extraction — agent embeds *mood: 😊* in reply ────────────
+        # Stripped before display, stored as 'mood' on the history entry so the
+        # frontend can render a small badge on the bubble without re-parsing.
+        _reply_mood = None
+        try:
+            import re as _re_mood
+            _mood_tag = _re_mood.search(r'\*mood:\s*(\S+)\*', reply)
+            if _mood_tag:
+                _candidate = _mood_tag.group(1).strip()
+                if _candidate in _MOOD_EMOJIS:
+                    _reply_mood = _candidate
+                reply = _re_mood.sub(r'\s*\*mood:\s*\S+\*\s*', ' ', reply).strip()
+                if _reply_mood:
+                    print(f"[MOOD] {_reply_mood} ({_MOOD_VOCAB.get(_reply_mood, '?')})")
+        except Exception as _mood_err:
+            print(f"[MOOD] Tag-detect error: {_mood_err}")
+        # ─────────────────────────────────────────────────────────────────────
+        _img_tag_uri      = None
+        _img_tag_stor_url = None
+        try:
+            import re as _re2
+            _img_tag = _re2.search(r'\*image:\s*([^\*]+)\*', reply, _re2.IGNORECASE)
+            if _img_tag:
+                _img_lib = _get_image_lib()
+                if _img_lib and _img_lib.count > 0:
+                    _kw_raw = _img_tag.group(1).strip()
+                    _keywords = [w for w in _re2.findall(r'[a-z]+', _kw_raw.lower()) if len(w) > 2]
+                    _char_p = SESSION.tts.extra.get("loaded_char_path", "")
+                    _char_n = os.path.splitext(os.path.basename(_char_p))[0] if _char_p else ""
+                    _img_res = _img_lib.pick_by_keywords(_keywords, _char_n)
+                    if _img_res:
+                        _img_tag_uri      = _img_res["uri"]
+                        _img_tag_stor_url = f"/images/{_img_res['rel_path']}"
+                        print(f"[IMAGE_LIB] Tag-attached '{_img_res['filename']}' "
+                              f"(matched={_img_res['matched_keywords']})")
+                reply = _re2.sub(r'\s*\*image:\s*[^\*]+\*\s*', ' ', reply).strip()
+        except Exception as _img_err:
+            print(f"[IMAGE_LIB] Tag-detect error: {_img_err}")
+
+        # ── Video tag auto-attach — agent embeds *video: keyword* in reply ────
+        _vid_tag_url      = None
+        _vid_tag_stor_url = None
+        try:
+            import re as _re3
+            _vid_tag = _re3.search(r'\*video:\s*([^\*]+)\*', reply, _re3.IGNORECASE)
+            if _vid_tag:
+                _vid_lib = _get_video_lib()
+                if _vid_lib and _vid_lib.count > 0:
+                    _kw_raw = _vid_tag.group(1).strip()
+                    _keywords = [w for w in _re3.findall(r'[a-z]+', _kw_raw.lower()) if len(w) > 2]
+                    _char_p = SESSION.tts.extra.get("loaded_char_path", "")
+                    _char_n = os.path.splitext(os.path.basename(_char_p))[0] if _char_p else ""
+                    _vid_res = _vid_lib.pick_by_keywords(_keywords, _char_n)
+                    if _vid_res:
+                        _vid_tag_url      = _vid_res["url"]
+                        _vid_tag_stor_url = _vid_res["url"]
+                        print(f"[VIDEO_LIB] Tag-attached '{_vid_res['filename']}' "
+                              f"(matched={_vid_res['matched_keywords']})")
+                reply = _re3.sub(r'\s*\*video:\s*[^\*]+\*\s*', ' ', reply).strip()
+        except Exception as _vid_err:
+            print(f"[VIDEO_LIB] Tag-detect error: {_vid_err}")
+        # ─────────────────────────────────────────────────────────────────────
+
+        generated_images      = []
+        generated_store_urls  = []
+        generated_videos      = []   # video serve URLs for browser + history
         for fid in file_ids:
             try:
                 b64, mime = llm.fetch_mistral_file_b64(fid)
                 generated_images.append(f"data:{mime};base64,{b64}")
+                generated_store_urls.append(f"data:{mime};base64,{b64}")  # no URL for Mistral files
             except Exception as fe:
                 print(f"[CHAT] Failed to fetch file {fid}: {fe}")
+        if _img_tag_uri and _img_tag_stor_url:
+            generated_images.append(_img_tag_uri)
+            generated_store_urls.append(_img_tag_stor_url)
+        if _vid_tag_url:
+            generated_videos.append(_vid_tag_url)
 
         # AC and FX quip prompts are internal — don't add to history or push to UI as user turns
         if not is_ac and not is_fx_quip:
-            # Use original_user_text (before resume_context rewrite) so the bubble
-            # shows what the user actually said, not the internal directive prefix.
             user_history_content = f"[image attached] {original_user_text}" if image_b64 else original_user_text
             user_entry = {"role": "user", "content": user_history_content}
             if image_b64:
                 user_entry["user_image"] = f"data:{image_mime};base64,{image_b64}"
             SESSION.chat_history.append(user_entry)
         asst_entry = {"role": "assistant", "content": reply}
-        if generated_images:
-            asst_entry["gen_images"] = generated_images
+        if generated_store_urls:
+            asst_entry["gen_images"] = generated_store_urls
+        if generated_videos:
+            asst_entry["gen_videos"] = generated_videos
+        if _reply_mood:
+            asst_entry["mood"] = _reply_mood
         SESSION.chat_history.append(asst_entry)
         if len(SESSION.chat_history) > MAX_HISTORY:
             SESSION.chat_history = SESSION.chat_history[-MAX_HISTORY:]
@@ -472,7 +784,9 @@ def chat():
             daemon=True,
         ).start()
 
-        response_data = {"reply": reply, "generated_images": generated_images}
+        response_data = {"reply": reply, "generated_images": generated_images,
+                         "generated_videos": generated_videos,
+                         "mood": _reply_mood}
         if safety_action in ("warn", "log"):
             response_data["safety"] = {
                 "action":      safety_action,
@@ -623,6 +937,146 @@ def ac_stream():
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
+# ── /chat/feedback ────────────────────────────────────────────────────────────
+
+@chat_bp.route("/chat/feedback", methods=["POST", "OPTIONS"])
+def chat_feedback():
+    """
+    Record a thumbs up or down on the last assistant response.
+    Writes a one-shot soft-injection note that prepends to the next real turn.
+
+    Body: { "rating": "up" | "down" }
+
+    TODO: expand body to support per-direction dropdown reason codes:
+          { "rating": "down", "reason": "too_long" | "out_of_character" | "boring" | "wrong_tone" }
+          and adjust the injected note text accordingly for finer-grained guidance.
+    """
+    if request.method == "OPTIONS":
+        return "", 204
+    global _feedback_note
+    data   = request.get_json(silent=True) or {}
+    rating = data.get("rating", "")
+    if rating == "up":
+        note = "[Note: Your previous response landed well — maintain that style and tone.]"
+    elif rating == "down":
+        note = "[Note: Your previous response missed the mark — be more natural and in-character next time.]"
+    else:
+        return jsonify({"error": "rating must be 'up' or 'down'"}), 400
+    with _feedback_lock:
+        _feedback_note = note
+    print(f"[FEEDBACK] {rating} — note queued for next turn")
+    return jsonify({"ok": True})
+
+
+# ── /chat/mood_vocab ──────────────────────────────────────────────────────────
+
+@chat_bp.route("/chat/mood_vocab", methods=["GET"])
+def chat_mood_vocab():
+    """Return the fixed emoji→label mood vocabulary for the frontend."""
+    return jsonify(_MOOD_VOCAB)
+
+
+# ── /chat/reroll ──────────────────────────────────────────────────────────────
+
+@chat_bp.route("/chat/reroll", methods=["POST", "OPTIONS"])
+def chat_reroll():
+    """
+    Regenerate the last assistant response.
+    Pops the last assistant entry (and any trailing assistant entries) from
+    history, finds the last user message, and replays it through the LLM.
+    Returns the same shape as /chat: {reply, generated_images, generated_videos}
+    """
+    if request.method == "OPTIONS":
+        return "", 204
+
+    SESSION      = _get_session()
+    SESSION_MODE = _get_session_mode()
+
+    with SESSION.lock:
+        if SESSION.busy:
+            return jsonify({"error": "busy"}), 429
+        SESSION.busy = True
+    SESSION.stop_ac_timer()
+
+    try:
+        llm = _get_client_llm() if SESSION_MODE == "isolated" else SESSION.llm
+
+        # Strip trailing assistant turns to expose the last user message
+        history = SESSION.chat_history
+        while history and history[-1]["role"] == "assistant":
+            history.pop()
+
+        if not history:
+            return jsonify({"error": "nothing to reroll"}), 400
+
+        # Find the last user message
+        last_user = next(
+            (m for m in reversed(history) if m["role"] == "user"), None
+        )
+        if not last_user:
+            return jsonify({"error": "no user message found"}), 400
+
+        user_text  = last_user.get("content", "")
+        image_b64  = last_user.get("user_image", None)
+        image_mime = "image/jpeg"
+        if image_b64 and "," in image_b64:
+            # strip data URI prefix to get raw b64
+            header, image_b64 = image_b64.split(",", 1)
+            image_mime = header.split(":")[1].split(";")[0] if ":" in header else "image/jpeg"
+
+        # Replay through LLM — use history *without* the just-popped assistant turn
+        raw = llm.chat(
+            user_text,
+            history[-(llm.max_history):],
+            image_b64=image_b64,
+            image_mime=image_mime,
+        )
+        if isinstance(raw, dict):
+            reply    = raw.get("reply", "...")
+            file_ids = raw.get("file_ids", [])
+        else:
+            reply    = raw
+            file_ids = []
+
+        reply = strip_leaked_context(reply)
+
+        generated_images = []
+        generated_videos = []
+        for fid in file_ids:
+            try:
+                b64, mime = llm.fetch_mistral_file_b64(fid)
+                generated_images.append(f"data:{mime};base64,{b64}")
+            except Exception as fe:
+                print(f"[REROLL] Failed to fetch file {fid}: {fe}")
+
+        # Append the fresh assistant turn back into history
+        asst_entry = {"role": "assistant", "content": reply}
+        if generated_images:
+            asst_entry["gen_images"] = generated_images
+        if generated_videos:
+            asst_entry["gen_videos"] = generated_videos
+        SESSION.chat_history.append(asst_entry)
+        if len(SESSION.chat_history) > MAX_HISTORY:
+            SESSION.chat_history = SESSION.chat_history[-MAX_HISTORY:]
+
+        # No push_chat_event here — the frontend renders directly from the fetch
+        # response. SSE broadcast would cause a duplicate bubble via the stream.
+
+        if SESSION_MODE != "isolated":
+            SESSION.save_persistent()
+
+        return jsonify({"reply": reply,
+                        "generated_images": generated_images,
+                        "generated_videos": generated_videos})
+
+    except Exception as e:
+        print(f"[REROLL] Error: {e}")
+        import traceback; traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        SESSION.busy = False
+
+
 # ── /ac/rearm ─────────────────────────────────────────────────────────────────
 
 _ac_rearm_lock = threading.Lock()
@@ -632,6 +1086,11 @@ def ac_rearm():
     if request.method == "OPTIONS":
         return "", 204
     SESSION = _get_session()
+    # Client calls /ac/rearm only after TTS has finished playing.
+    # If busy is somehow still True at this point it's a stuck flag — clear it.
+    if SESSION.busy:
+        print("[AC/REARM] Clearing stuck SESSION.busy flag")
+        SESSION.busy = False
     if SESSION.auto_continue_enabled:
         # Collapse rapid duplicate rearms — stop any existing timer first so we
         # never have two timers running in parallel.

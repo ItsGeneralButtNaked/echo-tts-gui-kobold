@@ -29,6 +29,8 @@ from web.conv_rag        import ConvRAG
 from web.initiative      import Initiative, SW_JS
 from web.session_restore import restore_session_state
 from extras.ascii_art    import AsciiArtLibrary
+from extras.image_lib    import ImageLibrary
+from extras.video_lib    import VideoLibrary
 
 
 # ── Silence noisy-but-harmless Werkzeug broken-pipe / SSL EOF errors ──────────
@@ -126,6 +128,24 @@ def create_app(config: dict) -> tuple[Flask, dict]:
     else:
         print(f"[ASCII ART] No art files found at {_art_path!r} — LLM fallback active")
 
+    # ── Image library ─────────────────────────────────────────────────────────
+    image_lib = ImageLibrary()
+    _image_dir = config.get("image_dir", "")
+    _image_count = image_lib.load(_image_dir) if _image_dir else 0
+    if _image_count:
+        print(f"[IMAGE_LIB] Library ready — {_image_count} image(s) from {_image_dir}")
+    else:
+        print(f"[IMAGE_LIB] No images found at {_image_dir!r}")
+
+    # ── Video library ─────────────────────────────────────────────────────────
+    video_lib = VideoLibrary()
+    _video_dir = config.get("video_dir", "")
+    _video_count = video_lib.load(_video_dir) if _video_dir else 0
+    if _video_count:
+        print(f"[VIDEO_LIB] Library ready — {_video_count} video(s) from {_video_dir}")
+    else:
+        print(f"[VIDEO_LIB] No videos found at {_video_dir!r}")
+
     # ── Initiative engine ─────────────────────────────────────────────────────
     initiative = Initiative()
     initiative.wire(
@@ -136,6 +156,9 @@ def create_app(config: dict) -> tuple[Flask, dict]:
         broadcast_fn = None,    # patched below after chat routes are imported
         strip_fn     = None,
         get_mood_fx  = lambda: bool(session.tts.extra.get("mood_fx_enabled", False)),
+        get_image_lib = lambda: image_lib,
+        get_video_lib = lambda: video_lib,
+        get_art_lib   = lambda: art_lib,
     )
 
     # ── Session state restore ─────────────────────────────────────────────────
@@ -222,6 +245,10 @@ def create_app(config: dict) -> tuple[Flask, dict]:
 
     @app.route("/initiative/reschedule", methods=["POST"])
     def initiative_reschedule():
+        # If busy is stuck True when the frontend reschedules, clear it
+        if session.busy:
+            print("[INITIATIVE/RESCHEDULE] Clearing stuck session.busy flag")
+            session.busy = False
         initiative.reschedule()
         return "", 204
 
@@ -241,6 +268,8 @@ def create_app(config: dict) -> tuple[Flask, dict]:
         get_rag           = lambda: rag,
         get_frontend_html = lambda: FRONTEND_HTML,
         get_art_lib       = lambda: art_lib,
+        get_image_lib     = lambda: image_lib,
+        get_video_lib     = lambda: video_lib,
     )
     app.register_blueprint(_chat_mod.chat_bp)
 
@@ -269,6 +298,10 @@ def create_app(config: dict) -> tuple[Flask, dict]:
         set_active_mode  = set_active_mode,
         get_art_lib      = lambda: art_lib,
         art_lib_path     = _art_path,
+        get_image_lib    = lambda: image_lib,
+        image_dir        = _image_dir,
+        get_video_lib    = lambda: video_lib,
+        video_dir        = _video_dir,
     )
     app.register_blueprint(_settings_mod.settings_bp)
 

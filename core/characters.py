@@ -68,6 +68,9 @@ def empty_character() -> dict:
         # Auto-continue
         "auto_continue_enabled": True,
         "auto_continue_mode":    "standard",
+        # First message (Janitor AI-style opening)
+        "first_message":         "",
+        "first_message_tts":     False,
     }
 
 

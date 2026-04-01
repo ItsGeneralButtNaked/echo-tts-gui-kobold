@@ -231,6 +231,24 @@ def load_character():
                 _initiative.start(ini_mode)
             else:
                 _initiative.stop()
+    if "initiative_fx_chance" in char:
+        _initiative.fx_chance = int(char["initiative_fx_chance"])
+        SESSION.tts.extra["initiative_fx_chance"] = _initiative.fx_chance
+    if "initiative_img_chance" in char:
+        _initiative.img_chance = int(char["initiative_img_chance"])
+        SESSION.tts.extra["initiative_img_chance"] = _initiative.img_chance
+    if "initiative_video_chance" in char:
+        _initiative.video_chance = int(char["initiative_video_chance"])
+        SESSION.tts.extra["initiative_video_chance"] = _initiative.video_chance
+    if "initiative_ascii_chance" in char:
+        _initiative.ascii_chance = int(char["initiative_ascii_chance"])
+        SESSION.tts.extra["initiative_ascii_chance"] = _initiative.ascii_chance
+    if "initiative_terminal_chance" in char:
+        _initiative.terminal_chance = int(char["initiative_terminal_chance"])
+        SESSION.tts.extra["initiative_terminal_chance"] = _initiative.terminal_chance
+    if "initiative_glitch_chance" in char:
+        _initiative.glitch_chance = int(char["initiative_glitch_chance"])
+        SESSION.tts.extra["initiative_glitch_chance"] = _initiative.glitch_chance
 
     if "memory_enabled" in char:
         new_memory.enabled = bool(char["memory_enabled"])
@@ -292,6 +310,18 @@ def load_character():
     SESSION.chat_history = incoming_bubbles
     print(f"[BUBBLES] Loaded {len(incoming_bubbles)} bubble(s) for '{char_name}'")
 
+    # Inject first message when starting a completely fresh conversation
+    first_msg = char.get("first_message", "").strip()
+    _first_msg_tts_pending = False
+    if first_msg and not incoming_bubbles:
+        SESSION.chat_history = [{"role": "assistant", "content": first_msg}]
+        _first_msg_tts_pending = bool(char.get("first_message_tts", False))
+        print(f"[FIRST_MSG] Injected opening message for '{char_name}' (tts={_first_msg_tts_pending})")
+
+    # Always keep these in SESSION so /state and save can read them back
+    SESSION.tts.extra["first_message"]     = char.get("first_message", "")
+    SESSION.tts.extra["first_message_tts"] = bool(char.get("first_message_tts", False))
+
     _safety.load_score(char_name)
     _safety.memory_hook = new_memory.add_entry
 
@@ -306,6 +336,7 @@ def load_character():
         "master_gain":   SESSION.tts.extra.get("master_gain", 1.5),
         "char_name":     char_name,
         "ui_hue":        SESSION.tts.extra.get("ui_hue", 140),
+        "first_message_tts_pending": _first_msg_tts_pending,
         "chat_history":  [{"role": m["role"], "content": m["content"],
                            "gen_images":  m.get("gen_images", []),
                            "user_image":  m.get("user_image")}
@@ -365,6 +396,8 @@ def save_character():
         "agent_id":         SESSION.llm.agent_id,
         "model":            SESSION.llm.model,
         "system_prompt":    SESSION.llm.system_prompt,
+        "first_message":    data.get("first_message", SESSION.tts.extra.get("first_message", "")),
+        "first_message_tts": bool(data.get("first_message_tts", SESSION.tts.extra.get("first_message_tts", False))),
         "max_reply_tokens": SESSION.llm.max_reply_tokens,
         "max_history":      SESSION.llm.max_history,
         "tts_provider_id":  SESSION.tts.provider_id,
@@ -405,6 +438,12 @@ def save_character():
         "auto_continue_mode":    SESSION.tts.extra.get("ac_mode",    SESSION.auto_continue_mode),
         "initiative_enabled":    SESSION.tts.extra.get("initiative_enabled", _initiative.enabled),
         "initiative_mode":       SESSION.tts.extra.get("initiative_mode",    _initiative.mode),
+        "initiative_fx_chance":      SESSION.tts.extra.get("initiative_fx_chance",      _initiative.fx_chance),
+        "initiative_img_chance":     SESSION.tts.extra.get("initiative_img_chance",     _initiative.img_chance),
+        "initiative_video_chance":   SESSION.tts.extra.get("initiative_video_chance",   _initiative.video_chance),
+        "initiative_ascii_chance":   SESSION.tts.extra.get("initiative_ascii_chance",   _initiative.ascii_chance),
+        "initiative_terminal_chance":SESSION.tts.extra.get("initiative_terminal_chance",_initiative.terminal_chance),
+        "initiative_glitch_chance":  SESSION.tts.extra.get("initiative_glitch_chance",  _initiative.glitch_chance),
         "memory_enabled":        SESSION.tts.extra.get("memory_enabled", _memory.enabled),
         "rag_file":              SESSION.tts.extra.get("rag_file", ""),
         "rag_semantic":          SESSION.tts.extra.get("rag_semantic", False),

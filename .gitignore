@@ -12,6 +12,44 @@ ascii_art/*
 !ascii_art/default/
 !ascii_art/default/**
 
+# But allow the Ecko folder
+!ascii_art/ecko/
+!ascii_art/ecko/**
+
+# But allow the CivChan folder
+!ascii_art/civchan/
+!ascii_art/civchan/**
+
+# Ignore everything in images
+images/*
+
+# But allow the default folder
+!images/default/
+!images/default/**
+
+# But allow the ECKO folder
+!images/ECKO/
+!images/ECKO/**
+
+# But allow the CivChan folder
+!images/CivChan/
+!images/CivChan/**
+
+# Ignore everything in videos
+videos/*
+
+# But allow the default folder
+!videos/default/
+!videos/default/**
+
+# But allow the ECKO folder
+!videos/ECKO/
+!videos/ECKO/**
+
+# But allow the CivChan folder
+!videos/CivChan/
+!videos/CivChan/**
+
 # Ignore this file
 eckotest.py
 ecko_session.json

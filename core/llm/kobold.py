@@ -81,6 +81,36 @@ def chat_kobold(caller, user_text: str, history: list,
         json=payload,
         timeout=120,
     )
+
+    # TODO: KoboldCPP image generation passthrough (low priority / high VRAM requirement)
+    #
+    # KoboldCPP exposes SD image gen via /sdapi/v1/txt2img (A1111-compatible) or
+    # /api/extra/sd/generate when an SD model is loaded alongside the LLM.
+    # The KoboldCPP UI handles this client-side — it detects the LLM's intent and
+    # calls the SD endpoint itself. External clients get no passthrough currently.
+    #
+    # Proposed implementation when VRAM allows:
+    #   1. Detect image gen intent in raw_text (e.g. *generate image: <desc>* tag
+    #      embedded by the LLM via system prompt instruction)
+    #   2. Extract the description from the tag and strip it from the reply text
+    #   3. Optional conversion step: if [IMGGEN_PROMPT_STYLE: illustrious|sdxl] is set
+    #      in the system prompt, run a second lightweight LLM call using a
+    #      [IMGGEN_CONVERSION_PROMPT: ...] system prompt block (also in the char card)
+    #      to convert natural language → booru-tag structured prompt before hitting SD.
+    #      Skip conversion entirely for Flux (natural caption encoder, passthrough fine).
+    #   4. POST to caller.base_url + /sdapi/v1/txt2img with the (converted) prompt
+    #   5. Return {\"reply\": reply_text, \"gen_images\": [data_uri]} from this function
+    #
+    # Practical constraints that make this genuinely low priority:
+    #   - Running base LLM + TTS + Illustrious/SDXL + conversion LLM + adetailers
+    #     simultaneously requires ~24-48GB VRAM to stay fluid. Most setups must
+    #     disable TTS just to run the LLM + SD at all.
+    #   - The static image library (extras/image_lib.py) is faster, visually
+    #     consistent (no face drift), and works on any hardware. Generation is a
+    #     lottery without heavy LoRA + consistent seeds. The library approach was
+    #     born from VRAM constraints and turns out to be architecturally superior
+    #     for character consistency — don't implement this unless generation quality
+    #     genuinely justifies the resource cost for the target user's hardware.
     r.raise_for_status()
     raw_text = r.json()["results"][0]["text"].strip()
 

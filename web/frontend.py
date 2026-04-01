@@ -56,9 +56,16 @@ FRONTEND_HTML = r"""<!DOCTYPE html>
   #safety-light.notice{background:#ffaa00;box-shadow:0 0 6px #ffaa00}
   #safety-light.warn{background:#ff6600;box-shadow:0 0 8px #ff6600}
   #safety-light.alert{background:#ff2222;box-shadow:0 0 12px #ff2222;animation:blink .6s step-end infinite}
-  #lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:9999;align-items:center;justify-content:center;cursor:zoom-out}
+  #lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:9999;align-items:center;justify-content:center;gap:0}
   #lightbox.show{display:flex}
-  #lightbox img{max-width:92vw;max-height:92vh;border-radius:8px;box-shadow:0 0 40px var(--green-glow);object-fit:contain}
+  #lb-img-wrap{position:relative;display:flex;align-items:center;justify-content:center;flex:1;min-width:0;max-width:92vw}
+  #lightbox img{max-width:100%;max-height:92vh;border-radius:8px;box-shadow:0 0 40px var(--green-glow);object-fit:contain;display:block}
+  #lb-prev,#lb-next{background:none;border:none;color:rgba(255,255,255,.55);font-size:52px;cursor:pointer;padding:0 18px;line-height:1;flex-shrink:0;transition:color .15s;user-select:none;z-index:1}
+  #lb-prev:hover,#lb-next:hover{color:#fff}
+  #lb-prev:disabled,#lb-next:disabled{opacity:.15;cursor:default}
+  #lb-counter{position:absolute;bottom:-26px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,.5);font-size:12px;font-family:var(--font-mono);white-space:nowrap;pointer-events:none}
+  #lb-close{position:fixed;top:16px;right:20px;background:none;border:none;color:rgba(255,255,255,.55);font-size:28px;cursor:pointer;line-height:1;padding:4px 8px;transition:color .15s}
+  #lb-close:hover{color:#fff}
   #chat{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:2px 2px 4px;overscroll-behavior:contain}
   #chat::-webkit-scrollbar{width:3px}
   #chat::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
@@ -93,6 +100,13 @@ FRONTEND_HTML = r"""<!DOCTYPE html>
   #img-clear-btn:hover{color:var(--danger)}
   .bubble-img{max-width:180px;max-height:180px;border-radius:10px;border:1px solid var(--border);display:block;margin-bottom:6px;cursor:pointer}
   .bubble-img:hover{opacity:0.85}
+  .bubble pre{font-family:var(--font-mono);font-size:11px;line-height:1.3;white-space:pre;overflow-x:auto;margin:0;padding:0;background:none;border:none;color:inherit;max-width:100%}
+  .bubble-actions{display:none;gap:4px;margin-top:6px;flex-wrap:nowrap}
+  .bubble.assistant:hover .bubble-actions{display:flex}
+  .bubble-actions button{background:none;border:1px solid var(--border);border-radius:8px;color:var(--text-dim);font-size:11px;padding:2px 7px;cursor:pointer;line-height:1.6;transition:color .12s,border-color .12s,background .12s;white-space:nowrap}
+  .bubble-actions button:hover{color:var(--green);border-color:var(--green-dark);background:var(--tint-dark)}
+  .bubble-actions button.rated{color:var(--green);border-color:var(--green-dark);background:var(--tint-dark)}
+  .bubble-mood{font-size:14px;line-height:1;margin-bottom:4px;display:block;opacity:0.75;user-select:none}
   @keyframes pulse-rec{0%,100%{box-shadow:0 0 10px rgba(255,76,76,.2)}50%{box-shadow:0 0 22px rgba(255,76,76,.5)}}
   #controls-row{display:flex;gap:6px;flex-wrap:nowrap}
   #controls-row .btn{flex:1;font-size:12px;padding:8px 6px;min-width:0;text-align:center;overflow:hidden;text-overflow:ellipsis}
@@ -211,6 +225,7 @@ FRONTEND_HTML = r"""<!DOCTYPE html>
     /* activated by JS: transform-origin, transform, image-rendering */
   }
   #avatar-code-canvas{position:absolute;inset:0;width:100%;height:100%;z-index:4;pointer-events:none;opacity:0;transition:opacity 2.5s ease}
+  #avatar-img-display{position:absolute;inset:0;width:100%;height:100%;z-index:3;pointer-events:none;opacity:0;object-fit:contain;transition:opacity .6s ease;background:transparent}
   #avatar-scanlines{position:absolute;inset:0;width:100%;height:100%;z-index:5;pointer-events:none}
   #avatar-static-canvas{position:absolute;inset:0;width:100%;height:100%;z-index:6;pointer-events:none}
   #avatar-color-overlay{position:absolute;inset:0;z-index:7;pointer-events:none;opacity:0;mix-blend-mode:color;background:var(--green)}
@@ -289,7 +304,16 @@ FRONTEND_HTML = r"""<!DOCTYPE html>
 </style>
 </head>
 <body>
-<div id="lightbox"><img id="lightbox-img" src="" alt=""></div>
+<div id="lightbox">
+  <button id="lb-prev" onclick="lbNav(-1)" title="Previous">&#8249;</button>
+  <div id="lb-img-wrap">
+    <img id="lightbox-img" src="" alt="">
+    <video id="lightbox-vid" src="" controls loop playsinline style="display:none;max-width:100%;max-height:92vh;border-radius:8px;box-shadow:0 0 40px var(--green-glow);object-fit:contain"></video>
+    <div id="lb-counter"></div>
+  </div>
+  <button id="lb-next" onclick="lbNav(1)" title="Next">&#8250;</button>
+  <button id="lb-close" onclick="closeLightbox()" title="Close">&#x2715;</button>
+</div>
 <div id="app">
 
   <div id="header">
@@ -350,6 +374,14 @@ FRONTEND_HTML = r"""<!DOCTYPE html>
     <div class="setting-row">
       <label>SYS PROMPT</label>
       <input type="text" id="s-system-prompt" placeholder="(optional system prompt)">
+    </div>
+    <div class="setting-row" style="align-items:flex-start">
+      <label style="padding-top:6px">FIRST MSG</label>
+      <textarea id="s-first-message" rows="3" placeholder="(optional opening message sent when chat is fresh)" style="flex:1;resize:vertical;background:var(--input-bg,#111);color:var(--fg,#e0e0e0);border:1px solid var(--border,#333);border-radius:4px;padding:6px 8px;font-family:inherit;font-size:inherit;line-height:1.4"></textarea>
+    </div>
+    <div class="setting-row">
+      <label>FM NARRATE</label>
+      <button class="btn" id="s-first-message-tts-btn" onclick="toggleFirstMessageTTS()" title="Narrate the first message via TTS">OFF</button>
     </div>
 
     <hr class="section-divider">
@@ -532,25 +564,80 @@ FRONTEND_HTML = r"""<!DOCTYPE html>
         <label style="letter-spacing:2px">INITIATIVE</label>
         <button class="btn" id="s-init-btn" onclick="toggleInitiative()" style="flex-shrink:0">OFF</button>
         <select id="s-init-mode" style="flex:1;min-width:80px">
+          <option value="test">Test · 20–30 sec</option>
           <option value="light">Light · 25–45 min</option>
           <option value="regular">Regular · 10–20 min</option>
           <option value="active">Active · 3–8 min</option>
         </select>
       </div>
       <div style="font-size:10px;color:var(--text-dim);padding-left:2px;line-height:1.5">
-        Character asks questions and surfaces topics unprompted, drawing on conversation history and memory. Works alongside or without Auto-continue.
+        Character sends messages, images, videos and effects unprompted. Sliders set the % chance each tick uses that action — remainder is normal text. Combined total caps at 100%.
       </div>
     </div>
 
-    <!-- FX auto-chance + test -->
+    <!-- Initiative chance breakdown display -->
+    <div id="s-init-budget" style="font-size:9px;color:var(--text-dim);font-family:var(--font-mono);padding:0 2px;letter-spacing:1px">
+      TEXT 85% · FX 15% · IMG 0% · VID 0% · ASCII 0% · TERM 0% · GLITCH 0%
+    </div>
+
+    <!-- FX chance -->
     <div class="setting-row" style="align-items:center;gap:8px;flex-wrap:wrap">
-      <label style="white-space:nowrap">FX CHANCE</label>
+      <label style="white-space:nowrap;min-width:60px">FX</label>
       <input type="range" id="s-fx-chance" min="0" max="100" step="5" value="15"
              style="flex:1;min-width:80px;accent-color:var(--green)"
-             oninput="document.getElementById('s-fx-chance-val').textContent=this.value+'%';_saveFxChance()"
-             title="Probability (0–100%) that the next initiative tick fires a visual effect instead of a message">
+             oninput="_onChanceInput('fx',this.value)"
+             title="Visual effect chance">
       <span id="s-fx-chance-val" style="font-size:10px;color:var(--green);min-width:30px;text-align:right">15%</span>
-      <button class="btn" onclick="_testFxNow()" title="Fire a random visual effect right now for testing" style="white-space:nowrap;padding:5px 10px;font-size:10px">TEST FX</button>
+    </div>
+
+    <!-- Image chance -->
+    <div class="setting-row" style="align-items:center;gap:8px;flex-wrap:wrap">
+      <label style="white-space:nowrap;min-width:60px">IMAGE</label>
+      <input type="range" id="s-img-chance" min="0" max="100" step="5" value="0"
+             style="flex:1;min-width:80px;accent-color:var(--green)"
+             oninput="_onChanceInput('img',this.value)"
+             title="Random image send chance">
+      <span id="s-img-chance-val" style="font-size:10px;color:var(--green);min-width:30px;text-align:right">0%</span>
+    </div>
+
+    <!-- Video chance -->
+    <div class="setting-row" style="align-items:center;gap:8px;flex-wrap:wrap">
+      <label style="white-space:nowrap;min-width:60px">VIDEO</label>
+      <input type="range" id="s-video-chance" min="0" max="100" step="5" value="0"
+             style="flex:1;min-width:80px;accent-color:var(--green)"
+             oninput="_onChanceInput('video',this.value)"
+             title="Random video send chance">
+      <span id="s-video-chance-val" style="font-size:10px;color:var(--green);min-width:30px;text-align:right">0%</span>
+    </div>
+
+    <!-- ASCII art chance -->
+    <div class="setting-row" style="align-items:center;gap:8px;flex-wrap:wrap">
+      <label style="white-space:nowrap;min-width:60px">ASCII</label>
+      <input type="range" id="s-ascii-chance" min="0" max="100" step="5" value="0"
+             style="flex:1;min-width:80px;accent-color:var(--green)"
+             oninput="_onChanceInput('ascii',this.value)"
+             title="ASCII art send chance">
+      <span id="s-ascii-chance-val" style="font-size:10px;color:var(--green);min-width:30px;text-align:right">0%</span>
+    </div>
+
+    <!-- Terminal/syslog chance -->
+    <div class="setting-row" style="align-items:center;gap:8px;flex-wrap:wrap">
+      <label style="white-space:nowrap;min-width:60px">TERMINAL</label>
+      <input type="range" id="s-terminal-chance" min="0" max="100" step="5" value="0"
+             style="flex:1;min-width:80px;accent-color:var(--green)"
+             oninput="_onChanceInput('terminal',this.value)"
+             title="Fake terminal / syslog output chance">
+      <span id="s-terminal-chance-val" style="font-size:10px;color:var(--green);min-width:30px;text-align:right">0%</span>
+    </div>
+
+    <!-- Glitch code chance -->
+    <div class="setting-row" style="align-items:center;gap:8px;flex-wrap:wrap">
+      <label style="white-space:nowrap;min-width:60px">GLITCH</label>
+      <input type="range" id="s-glitch-chance" min="0" max="100" step="5" value="0"
+             style="flex:1;min-width:80px;accent-color:var(--green)"
+             oninput="_onChanceInput('glitch',this.value)"
+             title="Glitch / corrupted code output chance">
+      <span id="s-glitch-chance-val" style="font-size:10px;color:var(--green);min-width:30px;text-align:right">0%</span>
     </div>
 
     <!-- Sleep timer -->
@@ -946,6 +1033,9 @@ FRONTEND_HTML = r"""<!DOCTYPE html>
           </div>
           <canvas id="avatar-pixel-canvas"></canvas>
           <canvas id="avatar-code-canvas"></canvas>
+          <img id="avatar-img-display" src="" alt="" draggable="false">
+          <video id="avatar-vid-display" src="" muted playsinline loop draggable="false"
+                 style="position:absolute;inset:0;width:100%;height:100%;z-index:3;pointer-events:none;opacity:0;object-fit:contain;transition:opacity .6s ease;background:transparent"></video>
           <canvas id="avatar-scanlines"></canvas>
           <canvas id="avatar-static-canvas"></canvas>
           <div id="avatar-color-overlay"></div>
@@ -1035,6 +1125,7 @@ FRONTEND_HTML = r"""<!DOCTYPE html>
       <button class="btn" id="open-mic-btn" onclick="toggleOpenMic()" title="Open-mic VAD mode">VAD</button>
       <button class="btn" id="mic-mute-btn" onclick="toggleMicMute()" title="Mute/unmute microphone" disabled style="opacity:0.35">🎙 MUTE</button>
       <button class="btn" onclick="stopAudio()">STOP</button>
+      <button class="btn" id="gallery-btn" onclick="openGallery()" title="Browse all images in chat" style="display:none">🖼</button>
       <div style="display:flex;align-items:center;gap:4px;margin-left:auto" title="Subtitle speed">
         <span style="font-size:9px;color:var(--text-dim);font-family:var(--font-mono)">CC</span>
         <input type="range" id="sub-speed-slider" min="4" max="30" step="1" value="11"
@@ -1071,6 +1162,7 @@ let _irBuffer=null;         // loaded ConvolverNode impulse response
 let _irB64=null;            // base64 of raw IR WAV for persistence
 let _irName='';             // filename for display
 let _fxEnabled=false;       // master FX on/off
+let _firstMessageTTS=false; // narrate first message via TTS
 const fxRowEnabled={reverb:true,delay:true,crush:true,chorus:true,ring:true,dist:true,revgate:false};
 
 function toggleFxRow(name){
@@ -1852,15 +1944,74 @@ async function toggleOpenMic(){
 }
 
 // ── Chat / bubbles ────────────────────────────────────────────────────────
-function addBubble(role,text){
-  const div=document.createElement('div');div.className='bubble '+role;div.textContent=text;
-  const chat=document.getElementById('chat');chat.appendChild(div);chat.scrollTop=chat.scrollHeight;
+function _scrollChatToBottom(){
+  // rAF ensures layout has absorbed any newly added images/videos before scrolling
+  const chat=document.getElementById('chat');
+  requestAnimationFrame(()=>{ chat.scrollTop=chat.scrollHeight; });
+}
+
+function _buildBubbleActions(div, replyText){
+  const bar=document.createElement('div');bar.className='bubble-actions';
+  // Thumbs up
+  const up=document.createElement('button');up.textContent='👍';up.title='Good response';
+  up.onclick=()=>{
+    if(up.classList.contains('rated')) return;
+    fetch('/chat/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rating:'up'})}).catch(()=>{});
+    up.classList.add('rated'); down.classList.remove('rated');
+  };
+  // Thumbs down
+  const down=document.createElement('button');down.textContent='👎';down.title='Bad response';
+  down.onclick=()=>{
+    if(down.classList.contains('rated')) return;
+    fetch('/chat/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rating:'down'})}).catch(()=>{});
+    down.classList.add('rated'); up.classList.remove('rated');
+  };
+  // Reroll
+  const reroll=document.createElement('button');reroll.textContent='↻ Reroll';reroll.title='Regenerate this response';
+  reroll.onclick=()=>rerollLast(div);
+  // Copy
+  const copy=document.createElement('button');copy.textContent='⎘ Copy';copy.title='Copy to clipboard';
+  copy.onclick=()=>{ navigator.clipboard.writeText(replyText).then(()=>{ copy.textContent='✓ Copied'; setTimeout(()=>copy.textContent='⎘ Copy',1500); }); };
+  bar.append(up,down,reroll,copy);
+  return bar; // caller appends AFTER all media so bar stays at bottom
+}
+
+function _bubbleContent(div, text) {
+  // Detect fenced ascii art: ``` with no language tag (or ascii tag)
+  // Render as <pre> so it displays correctly in the bubble.
+  // Python/terminal blocks (```python) are left as raw text — they display
+  // as code in the bubble intentionally and go to the avatar canvas renderer.
+  const asciiMatch = text.match(/^```(?:ascii)?\s*\n([\s\S]*?)```\s*$/i);
+  if (asciiMatch) {
+    const pre = document.createElement('pre');
+    pre.style.cssText = 'font-family:var(--font-mono);font-size:11px;line-height:1.3;white-space:pre;overflow-x:auto;margin:0;padding:0;background:none;border:none;color:inherit';
+    pre.textContent = asciiMatch[1];
+    div.appendChild(pre);
+    return true; // was ascii art
+  }
+  // Normal text
+  div.appendChild(document.createTextNode(text));
+  return false;
+}
+
+function addBubble(role, text, mood){
+  const div=document.createElement('div');div.className='bubble '+role;
+  if(mood){ const m=document.createElement('span');m.className='bubble-mood';m.textContent=mood;div.appendChild(m); }
+  _bubbleContent(div, text);
+  const chat=document.getElementById('chat');chat.appendChild(div);_scrollChatToBottom();
+  // Action bar stored on the element — media appenders call _sealBubble() when done
+  if(role==='assistant') div._actionBar = _buildBubbleActions(div, text);
   if (_avOverlayOpen) _avCheckBubbleForCode(text);
   return div;
 }
+
+function _sealBubble(div){
+  // Append the action bar after all media has been added to the bubble
+  if(div && div._actionBar){ div.appendChild(div._actionBar); div._actionBar=null; }
+}
 function addThinking(){
   const div=document.createElement('div');div.className='bubble thinking';div.innerHTML='<span class="dot-pulse">thinking</span>';
-  const chat=document.getElementById('chat');chat.appendChild(div);chat.scrollTop=chat.scrollHeight;return div;
+  const chat=document.getElementById('chat');chat.appendChild(div);_scrollChatToBottom();return div;
 }
 async function sendText(){
   const inp=document.getElementById('msg-input');
@@ -2039,7 +2190,7 @@ async function doSend(text,resumeCtx='',isAC=false){
   if(imgB64)clearImage();
   if(!isAC){
     const userBubble=addBubble('user',text);
-    if(imgB64){const th=document.createElement('img');th.src='data:'+imgMime+';base64,'+imgB64;th.className='bubble-img';th.style.cursor='zoom-in';th.onclick=()=>openLightbox(th.src);userBubble.insertBefore(th,userBubble.firstChild);}
+    if(imgB64){const th=document.createElement('img');th.src='data:'+imgMime+';base64,'+imgB64;th.className='bubble-img';th.style.cursor='zoom-in';th.onclick=()=>openLightbox(th);userBubble.insertBefore(th,userBubble.firstChild);}
   }
   const thinking=addThinking();
   try{
@@ -2054,8 +2205,21 @@ async function doSend(text,resumeCtx='',isAC=false){
     if(data.error){addBubble('assistant','[Error: '+data.error+']');isBusy=false;return;}
     // Check generation after the long LLM wait — barge-in may have happened
     if(_ttsGeneration!==myGen){thinking.remove();return;}
-    const asstBubble=addBubble('assistant',data.reply);
-    (data.generated_images||[]).forEach(dataUri=>{const img=document.createElement('img');img.src=dataUri;img.className='bubble-img generated-img';img.style.cssText='max-width:100%;max-height:360px;margin-top:8px;cursor:zoom-in';img.onclick=()=>openLightbox(dataUri);asstBubble.appendChild(img);});
+    const asstBubble=addBubble('assistant',data.reply,data.mood||null);
+    (data.generated_images||[]).forEach(dataUri=>{const img=document.createElement('img');img.src=dataUri;img.className='bubble-img generated-img';img.style.cssText='max-width:100%;max-height:360px;margin-top:8px;cursor:zoom-in';img.onclick=()=>openLightbox(img);asstBubble.appendChild(img);});
+    if((data.generated_images||[]).length && _avOverlayOpen) _avShowImage(data.generated_images[0]);
+    (data.generated_videos||[]).forEach(vidUrl=>{
+      const vid=document.createElement('video');
+      vid.src=vidUrl; vid.muted=true; vid.autoplay=true; vid.loop=true; vid.playsinline=true;
+      vid.className='bubble-img generated-vid';
+      vid.style.cssText='max-width:100%;max-height:360px;margin-top:8px;cursor:zoom-in;display:block;border-radius:4px';
+      vid.title='Click to zoom / fullscreen';
+      vid.onclick=()=>openLightbox(vid);
+      asstBubble.appendChild(vid);
+    });
+    _sealBubble(asstBubble);
+    if((data.generated_images||[]).length||(data.generated_videos||[]).length) _scrollChatToBottom();
+    if((data.generated_videos||[]).length && _avOverlayOpen) _avShowVideo(data.generated_videos[0]);
     if(data.safety) _handleSafetyResponse(data.safety);
     _currentReplyText=data.reply;_ttsPlayStartTime=audioCtx?audioCtx.currentTime+0.06:0;
     if(_ttsGeneration===myGen){
@@ -2063,8 +2227,6 @@ async function doSend(text,resumeCtx='',isAC=false){
       await playTTS(_stripCodeForTTS(data.reply),myGen);
       if(openMicState==='playing')setOpenMicState('listening');
     }
-    // TTS finished — now safe to rearm AC (server timer was NOT started on reply)
-    rearmAC();
     // On real turns, refresh memory count — extraction runs async so poll at 3s and 12s
     if(!isAC){
       const _refreshMemCount = async () => {
@@ -2081,14 +2243,16 @@ async function doSend(text,resumeCtx='',isAC=false){
   }catch(e){
     thinking.remove();
     if(e.name!=='AbortError') addBubble('assistant','[Connection error]');
-    else {
-      // Chat was aborted (barge-in). Wait for the server's /tts stop+settle to
-      // complete before rearming AC — otherwise AC can fire a new LLM+TTS call
-      // while EchoTTS is still clearing the previous inference → OOM.
-      setTimeout(rearmAC, 400);
-    }
+    // AbortError (barge-in): delay rearm so EchoTTS can clear its inference first
+    // Other errors (e.g. TTS connection refused): rearm immediately
+    if(e.name==='AbortError') { setTimeout(rearmAC, 400); return; }
   }
-  finally{isBusy=false;}
+  finally{
+    isBusy=false;
+    // Always rearm AC after doSend completes — whether TTS succeeded, failed, or was skipped.
+    // Barge-in (AbortError) returns early above with a delayed rearm, so skip here.
+    rearmAC();
+  }
 }
 
 function onImageSelected(input){
@@ -2160,6 +2324,49 @@ function _userIsTyping() {
   const avInp = document.getElementById('avatar-msg-input');
   return (inp   && inp.value.trim().length   > 0) ||
          (avInp && avInp.value.trim().length > 0);
+}
+
+// ── Reroll — regenerate the last assistant response ───────────────────────────
+async function rerollLast(bubbleEl) {
+  if (isBusy) return;
+  isBusy = true;
+
+  // Remove the bubble being rerolled and any thinking bubble that might linger
+  const chat = document.getElementById('chat');
+  if (bubbleEl && bubbleEl.parentNode === chat) bubbleEl.remove();
+
+  const thinking = addThinking();
+  const myGen = ++_ttsGeneration;
+
+  try {
+    const res = await fetch('/chat/reroll', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}) });
+    thinking.remove();
+    if (!res.ok) { addBubble('assistant', '[Reroll failed]'); isBusy = false; return; }
+    const data = await res.json();
+    if (data.error) { addBubble('assistant', '[' + data.error + ']'); isBusy = false; return; }
+
+    const newBubble = addBubble('assistant', data.reply);
+    (data.generated_images||[]).forEach(uri=>{ const img=document.createElement('img');img.src=uri;img.className='bubble-img generated-img';img.style.cssText='max-width:100%;max-height:360px;margin-top:8px;cursor:zoom-in';img.onclick=()=>openLightbox(img);newBubble.appendChild(img); });
+    (data.generated_videos||[]).forEach(url=>{ const vid=document.createElement('video');vid.src=url;vid.muted=true;vid.autoplay=true;vid.loop=true;vid.playsinline=true;vid.className='bubble-img generated-vid';vid.style.cssText='max-width:100%;max-height:360px;margin-top:8px;cursor:zoom-in;display:block;border-radius:4px';vid.title='Click to zoom / fullscreen';vid.onclick=()=>openLightbox(vid);newBubble.appendChild(vid); });
+    _sealBubble(newBubble);
+    if((data.generated_images||[]).length||(data.generated_videos||[]).length) _scrollChatToBottom();
+
+    _currentReplyText = data.reply;
+    _ttsPlayStartTime = audioCtx ? audioCtx.currentTime + 0.06 : 0;
+    if (_ttsGeneration === myGen) {
+      if (openMicState !== 'off') setOpenMicState('playing');
+      await playTTS(_stripCodeForTTS(data.reply), myGen);
+      if (openMicState === 'playing') setOpenMicState('listening');
+    }
+  } catch(e) {
+    thinking.remove();
+    addBubble('assistant', '[Reroll error]');
+  } finally {
+    isBusy = false;
+    rearmAC();
+  }
 }
 
 // Debounced rearm — collapses multiple calls within 300ms into one POST
@@ -2285,6 +2492,8 @@ async function applySettings(){
     agent_id:      document.getElementById('s-agent-id').value.trim(),
     model:         document.getElementById('s-model').value.trim(),
     system_prompt: document.getElementById('s-system-prompt').value,
+    first_message:     document.getElementById('s-first-message').value,
+    first_message_tts: _firstMessageTTS,
     max_reply_tokens: parseInt(document.getElementById('s-max-tokens').value)||300,
     tts_provider_id: tpid,
     tts_base_url:  document.getElementById('s-tts-base-url').value.trim(),
@@ -2379,17 +2588,29 @@ async function loadCharacter(){
     if(data.chat_history&&data.chat_history.length){
       data.chat_history.forEach(msg=>{
         const dispText=msg.user_image?msg.content.replace(/^\[image attached\]\s*/,''):msg.content;
-        const bubble=addBubble(msg.role,dispText);
-        if(msg.user_image){const ui=document.createElement('img');ui.src=msg.user_image;ui.className='bubble-img';ui.style.cursor='zoom-in';ui.onclick=()=>openLightbox(ui.src);bubble.insertBefore(ui,bubble.firstChild);}
+        const bubble=addBubble(msg.role, dispText, msg.mood||null);
+        if(msg.user_image){const ui=document.createElement('img');ui.src=msg.user_image;ui.className='bubble-img';ui.style.cursor='zoom-in';ui.onclick=()=>openLightbox(ui);bubble.insertBefore(ui,bubble.firstChild);}
         (msg.gen_images||[]).forEach(uri=>{
           const img=document.createElement('img');img.src=uri;
           img.className='bubble-img generated-img';
           img.style.cssText='max-width:100%;max-height:360px;margin-top:8px;cursor:zoom-in';
-          img.onclick=()=>openLightbox(uri);bubble.appendChild(img);
+          img.onclick=()=>openLightbox(img);bubble.appendChild(img);
         });
+        (msg.gen_videos||[]).forEach(url=>{
+          const vid=document.createElement('video');vid.src=url;vid.muted=true;vid.autoplay=true;vid.loop=true;vid.playsinline=true;
+          vid.className='bubble-img generated-vid';
+          vid.style.cssText='max-width:100%;max-height:360px;margin-top:8px;cursor:zoom-in;display:block;border-radius:4px';
+          vid.title='Click to zoom / fullscreen';vid.onclick=()=>openLightbox(vid);bubble.appendChild(vid);
+        });
+        _sealBubble(bubble);
       });
     }
     await loadState();
+    if(data.first_message_tts_pending && data.chat_history && data.chat_history.length===1 && data.chat_history[0].role==='assistant'){
+      const myGen=++_ttsGeneration;
+      _ttsPlayStartTime=audioCtx?audioCtx.currentTime+0.06:0;
+      playTTS(_stripCodeForTTS(data.chat_history[0].content),myGen).catch(()=>{});
+    }
 
   };
 
@@ -2563,6 +2784,8 @@ async function saveCurrentCharacter(){
   const kvMaxL=document.getElementById('s-kv-max-layers').value.trim();
   const payload={name, subfolder, master_gain:masterGain, kv_scale:kvRaw||null,
     kv_min_t:kvMinT?parseFloat(kvMinT):0.9, kv_max_layers:kvMaxL?parseInt(kvMaxL):24,
+    first_message: document.getElementById('s-first-message').value,
+    first_message_tts: _firstMessageTTS,
     fx_enabled:_fxEnabled,
     reverb_wet:parseFloat(document.getElementById('reverb-wet').value),
     reverb_predelay:parseFloat(document.getElementById('reverb-predelay').value),
@@ -2605,6 +2828,8 @@ async function saveNewCharacter(){
   const kvMaxL=document.getElementById('s-kv-max-layers').value.trim();
   const payload={name, master_gain:masterGain, kv_scale:kvRaw||null,
     kv_min_t:kvMinT?parseFloat(kvMinT):0.9, kv_max_layers:kvMaxL?parseInt(kvMaxL):24,
+    first_message: document.getElementById('s-first-message').value,
+    first_message_tts: _firstMessageTTS,
     fx_enabled:_fxEnabled,
     reverb_wet:parseFloat(document.getElementById('reverb-wet').value),
     reverb_predelay:parseFloat(document.getElementById('reverb-predelay').value),
@@ -2644,8 +2869,17 @@ async function saveNewCharacter(){
 }
 async function resetConversation(){
   if(!confirm('Reset conversation?'))return;
-  await fetch('/reset',{method:'POST'});
+  const res=await fetch('/reset',{method:'POST'});
+  const data=await res.json();
   document.getElementById('chat').innerHTML='';
+  if(data.first_message){
+    addBubble('assistant',data.first_message);
+    if(data.first_message_tts){
+      const myGen=++_ttsGeneration;
+      _ttsPlayStartTime=audioCtx?audioCtx.currentTime+0.06:0;
+      playTTS(_stripCodeForTTS(data.first_message),myGen).catch(()=>{});
+    }
+  }
 }
 
 // ── Context Mode ─────────────────────────────────────────────────────────
@@ -2682,6 +2916,12 @@ function _applyWebSearchUI(enabled){
 }
 function toggleWebSearch(){
   _applyWebSearchUI(!_webSearchEnabled);
+}
+
+function toggleFirstMessageTTS(){
+  _firstMessageTTS=!_firstMessageTTS;
+  const btn=document.getElementById('s-first-message-tts-btn');
+  if(btn){btn.textContent=_firstMessageTTS?'ON':'OFF';btn.className='btn'+(_firstMessageTTS?' on':'');}
 }
 
 function _applyContextModeUI(name){
@@ -2902,9 +3142,18 @@ async function clearAllMemory(){
 
 async function clearAllSession(btn){
   if(!confirm('CLEAR ALL?\n\nThis will permanently delete:\n  • Conversation history\n  • Conversation RAG file\n  • Extra RAG index\n  • All memory entries\n\nThis cannot be undone.')) return;
-  await fetch('/clear_all',{method:'POST'});
+  const res=await fetch('/clear_all',{method:'POST'});
+  const data=await res.json();
   // Clear chat UI
   document.getElementById('chat').innerHTML='';
+  if(data.first_message){
+    addBubble('assistant',data.first_message);
+    if(data.first_message_tts){
+      const myGen=++_ttsGeneration;
+      _ttsPlayStartTime=audioCtx?audioCtx.currentTime+0.06:0;
+      playTTS(_stripCodeForTTS(data.first_message),myGen).catch(()=>{});
+    }
+  }
   // Clear memory UI
   document.getElementById('memory-cards').innerHTML='';
   document.getElementById('memory-status').textContent='0 entries';
@@ -3011,6 +3260,9 @@ async function loadState(){
     document.getElementById('s-agent-id').value=data.agent_id||'';
     document.getElementById('s-model').value=data.model||'';
     document.getElementById('s-system-prompt').value=data.system_prompt||'';
+    document.getElementById('s-first-message').value=data.first_message||'';
+    _firstMessageTTS=!!(data.first_message_tts);
+    {const btn=document.getElementById('s-first-message-tts-btn');if(btn){btn.textContent=_firstMessageTTS?'ON':'OFF';btn.className='btn'+(_firstMessageTTS?' on':'');}}
     document.getElementById('s-max-tokens').value=data.max_reply_tokens||300;
 
     // TTS provider dropdown — set fields BEFORE calling onTTSProviderChange
@@ -3057,10 +3309,24 @@ async function loadState(){
     _initiativeNextSecs = data.initiative_next_secs || 0;
     _applyInitiativeUI();
 
-    // FX chance
-    if (data.initiative_fx_chance !== undefined) {
-      const sl = document.getElementById('s-fx-chance');
-      if (sl) { sl.value = data.initiative_fx_chance; document.getElementById('s-fx-chance-val').textContent = data.initiative_fx_chance + '%'; }
+    // Initiative chance sliders — restore all 6 and update budget display
+    {
+      const _restoreMap = {
+        fx:       data.initiative_fx_chance,
+        img:      data.initiative_img_chance,
+        video:    data.initiative_video_chance,
+        ascii:    data.initiative_ascii_chance,
+        terminal: data.initiative_terminal_chance,
+        glitch:   data.initiative_glitch_chance,
+      };
+      for (const [k, v] of Object.entries(_restoreMap)) {
+        if (v === undefined) continue;
+        const sl  = document.getElementById(`s-${k}-chance`);
+        const lbl = document.getElementById(`s-${k}-chance-val`);
+        if (sl)  sl.value = v;
+        if (lbl) lbl.textContent = v + '%';
+      }
+      _updateChanceBudget();
     }
 
     // Subtitle speed
@@ -3251,13 +3517,20 @@ async function loadState(){
     if(chatDiv.children.length===0&&data.chat_history&&data.chat_history.length){
       data.chat_history.forEach(msg=>{
         const dispText=msg.user_image?msg.content.replace(/^\[image attached\]\s*/,''):msg.content;
-        const bubble=addBubble(msg.role, dispText);
-        if(msg.user_image){const ui=document.createElement('img');ui.src=msg.user_image;ui.className='bubble-img';ui.style.cursor='zoom-in';ui.onclick=()=>openLightbox(ui.src);bubble.insertBefore(ui,bubble.firstChild);}
+        const bubble=addBubble(msg.role, dispText, msg.mood||null);
+        if(msg.user_image){const ui=document.createElement('img');ui.src=msg.user_image;ui.className='bubble-img';ui.style.cursor='zoom-in';ui.onclick=()=>openLightbox(ui);bubble.insertBefore(ui,bubble.firstChild);}
         (msg.gen_images||[]).forEach(uri=>{
           const img=document.createElement('img');img.src=uri;img.className='bubble-img generated-img';
           img.style.cssText='max-width:100%;max-height:360px;margin-top:8px;cursor:zoom-in';
-          img.onclick=()=>openLightbox(uri);bubble.appendChild(img);
+          img.onclick=()=>openLightbox(img);bubble.appendChild(img);
         });
+        (msg.gen_videos||[]).forEach(url=>{
+          const vid=document.createElement('video');vid.src=url;vid.muted=true;vid.autoplay=true;vid.loop=true;vid.playsinline=true;
+          vid.className='bubble-img generated-vid';
+          vid.style.cssText='max-width:100%;max-height:360px;margin-top:8px;cursor:zoom-in;display:block;border-radius:4px';
+          vid.title='Click to zoom / fullscreen';vid.onclick=()=>openLightbox(vid);bubble.appendChild(vid);
+        });
+        _sealBubble(bubble);
       });
     }
   }catch(e){console.error('[STATE]',e);}
@@ -3290,12 +3563,133 @@ const msgInput=document.getElementById('msg-input');
 msgInput.addEventListener('input',()=>{msgInput.style.height='auto';msgInput.style.height=Math.min(msgInput.scrollHeight,110)+'px';});
 msgInput.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendText();}});
 
-// ── Lightbox ───────────────────────────────────────────────────────────────
-const _lb=document.getElementById('lightbox');
-const _lbImg=document.getElementById('lightbox-img');
-function openLightbox(src){_lbImg.src=src;_lb.classList.add('show');}
-_lb.addEventListener('click',()=>{_lb.classList.remove('show');_lbImg.src='';});
-document.addEventListener('keydown',e=>{if(e.key==='Escape')_lb.classList.remove('show');});
+// ── Gallery Lightbox ───────────────────────────────────────────────────────
+const _lb    = document.getElementById('lightbox');
+const _lbImg = document.getElementById('lightbox-img');
+const _lbVid = document.getElementById('lightbox-vid');
+const _lbCounter = document.getElementById('lb-counter');
+const _lbPrev = document.getElementById('lb-prev');
+const _lbNext = document.getElementById('lb-next');
+
+let _lbSrcs  = [];   // all media srcs in current gallery session
+let _lbTypes = [];   // 'img' or 'vid' per entry
+let _lbIdx   = 0;    // current index
+
+function _lbIsVideo(src) {
+  return /\.(mp4|webm|mkv|mov|avi|m4v)(\?|$)/i.test(src);
+}
+
+function _lbCollectAll() {
+  // Gather every bubble media element (img + video) in DOM order
+  // Store the DOM element itself so we can match by identity, not by src string
+  // (video .src returns absolute URL but onclick receives the relative path)
+  const els = [], srcs = [], types = [];
+  document.querySelectorAll('#chat .bubble-img').forEach(el => {
+    const src = el.getAttribute('src') || el.src || el.currentSrc;
+    if (!src) return;
+    els.push(el);
+    srcs.push(src);
+    types.push(el.tagName === 'VIDEO' ? 'vid' : 'img');
+  });
+  return { els, srcs, types };
+}
+
+function _lbShow(idx) {
+  if (!_lbSrcs.length) return;
+  _lbIdx = (idx + _lbSrcs.length) % _lbSrcs.length;
+  const src  = _lbSrcs[_lbIdx];
+  const type = _lbTypes[_lbIdx];
+  const total = _lbSrcs.length;
+  if (type === 'vid') {
+    _lbVid.src = src;
+    _lbVid.style.display = '';
+    _lbImg.style.display = 'none';
+    _lbImg.src = '';
+    _lbVid.load();
+    _lbVid.play().catch(()=>{});
+  } else {
+    _lbImg.src = src;
+    _lbImg.style.display = '';
+    _lbVid.style.display = 'none';
+    _lbVid.pause(); _lbVid.src = '';
+  }
+  _lbCounter.textContent = total > 1 ? `${_lbIdx + 1} / ${total}` : '';
+  _lbPrev.disabled = total <= 1;
+  _lbNext.disabled = total <= 1;
+  _lb.classList.add('show');
+}
+
+function openLightbox(clickedEl) {
+  // Accept either a DOM element (from onclick passing `this` or the el ref)
+  // or a src string — resolve to an index via element identity first,
+  // then fall back to src string comparison so old callers still work.
+  const { els, srcs, types } = _lbCollectAll();
+  _lbSrcs = srcs; _lbTypes = types;
+  let idx = -1;
+  if (clickedEl && typeof clickedEl === 'object' && clickedEl.nodeType) {
+    idx = els.indexOf(clickedEl);
+  }
+  if (idx < 0 && typeof clickedEl === 'string') {
+    // Try matching the raw value against getAttribute('src') stored values
+    idx = srcs.indexOf(clickedEl);
+    // Also try stripping the origin so relative paths match absolute ones
+    if (idx < 0) {
+      const rel = clickedEl.replace(location.origin, '');
+      idx = srcs.findIndex(s => s.replace(location.origin, '') === rel);
+    }
+  }
+  _lbShow(idx >= 0 ? idx : 0);
+}
+
+function openGallery() {
+  const { srcs, types } = _lbCollectAll();
+  _lbSrcs = srcs; _lbTypes = types;
+  if (!_lbSrcs.length) return;
+  _lbShow(0);
+}
+
+function closeLightbox() {
+  _lb.classList.remove('show');
+  _lbImg.src = '';
+  _lbVid.pause(); _lbVid.src = '';
+  _lbVid.style.display = 'none';
+  _lbImg.style.display = '';
+}
+
+function lbNav(dir) {
+  _lbShow(_lbIdx + dir);
+}
+
+
+// Click backdrop (not buttons/img) to close
+_lb.addEventListener('click', e => {
+  if (e.target === _lb) closeLightbox();
+});
+
+document.addEventListener('keydown', e => {
+  if (!_lb.classList.contains('show')) return;
+  if (e.key === 'Escape')      closeLightbox();
+  else if (e.key === 'ArrowLeft')  lbNav(-1);
+  else if (e.key === 'ArrowRight') lbNav(1);
+});
+
+// Show/hide gallery button whenever bubble images change
+function _lbUpdateGalleryBtn() {
+  const btn = document.getElementById('gallery-btn');
+  if (!btn) return;
+  const count = document.querySelectorAll('#chat .bubble-img').length;
+  btn.style.display = count > 0 ? '' : 'none';
+  btn.title = count > 0 ? `Gallery — ${count} item${count === 1 ? '' : 's'}` : 'Gallery';
+}
+
+// Watch #chat for added/removed images and keep gallery button in sync
+(function _initGalleryObserver() {
+  const chatEl = document.getElementById('chat');
+  if (!chatEl) return;
+  const obs = new MutationObserver(() => _lbUpdateGalleryBtn());
+  obs.observe(chatEl, { childList: true, subtree: true });
+  _lbUpdateGalleryBtn(); // initial state
+})();
 
 // ── Safety ────────────────────────────────────────────────────────────────
 let _safetyL1=true, _safetyL2=true;
@@ -3743,6 +4137,8 @@ function closeAvatarOverlay() {
   cancelAnimationFrame(_avEffectFrame); _avEffectFrame = null;
   clearInterval(_avGlitchTimer);
   _avDismissCode();
+  _avDismissImage(/*immediate=*/true);
+  _avDismissVideo(/*immediate=*/true);
   if (!_avEnabled) _avStopBlink();
   const hb = document.getElementById('avatar-header-btn');
   if (hb) hb.className = 'btn';
@@ -3872,18 +4268,32 @@ async function navigateCharacter(dir) {
       if (data.chat_history && data.chat_history.length) {
         data.chat_history.forEach(msg => {
           const dispText=msg.user_image?msg.content.replace(/^\[image attached\]\s*/,''):msg.content;
-          const bubble = addBubble(msg.role, dispText);
-          if(msg.user_image){const ui=document.createElement('img');ui.src=msg.user_image;ui.className='bubble-img';ui.style.cursor='zoom-in';ui.onclick=()=>openLightbox(ui.src);bubble.insertBefore(ui,bubble.firstChild);}
+          const bubble = addBubble(msg.role, dispText, msg.mood||null);
+          if(msg.user_image){const ui=document.createElement('img');ui.src=msg.user_image;ui.className='bubble-img';ui.style.cursor='zoom-in';ui.onclick=()=>openLightbox(ui);bubble.insertBefore(ui,bubble.firstChild);}
           (msg.gen_images || []).forEach(uri => {
             const im = document.createElement('img'); im.src = uri;
             im.className = 'bubble-img generated-img';
             im.style.cssText = 'max-width:100%;max-height:360px;margin-top:8px;cursor:zoom-in';
             im.onclick = () => openLightbox(uri); bubble.appendChild(im);
           });
+          (msg.gen_videos || []).forEach(url => {
+            const vid = document.createElement('video'); vid.src=url; vid.muted=true; vid.autoplay=true; vid.loop=true; vid.playsinline=true;
+            vid.className = 'bubble-img generated-vid';
+            vid.style.cssText = 'max-width:100%;max-height:360px;margin-top:8px;cursor:zoom-in;display:block;border-radius:4px';
+            vid.title = 'Click to zoom / fullscreen'; vid.onclick = () => openLightbox(url); bubble.appendChild(vid);
+          });
+          _sealBubble(bubble);
         });
       }
 
       await loadState();
+
+      // Narrate first message if freshly injected with TTS enabled
+      if(data.first_message_tts_pending && data.chat_history && data.chat_history.length===1 && data.chat_history[0].role==='assistant'){
+        const myGen=++_ttsGeneration;
+        _ttsPlayStartTime=audioCtx?audioCtx.currentTime+0.06:0;
+        playTTS(_stripCodeForTTS(data.chat_history[0].content),myGen).catch(()=>{});
+      }
     } catch(e) { console.error('[NAV]', e); }
   });
 
@@ -4610,6 +5020,8 @@ function _avShowCode(code, type='code') {
 
 function _avRunCode(code, type='code') {
   if (!_avOverlayOpen) return;
+  _avDismissImage(/*immediate=*/true);  // image/video yields to code/ascii
+  _avDismissVideo(/*immediate=*/true);
   _avCodeActive = true;
   _avCurrentCode = code;
   clearTimeout(_avCodeDismissTimer);
@@ -4846,6 +5258,102 @@ function _avDismissCode(soft=false) {
   const canvas = document.getElementById('avatar-code-canvas');
   if (img)    img.style.opacity    = '1';
   if (canvas) canvas.style.opacity = '0';
+}
+
+// ── Avatar image display ──────────────────────────────────────────────────────
+// Shows a shared image in the avatar viewport, fading over the character image.
+// Holds for _AV_IMG_HOLD_MS then fades out automatically.
+// Dismissed immediately if a code/ascii block starts rendering.
+
+const _AV_IMG_HOLD_MS   = 8000;  // how long image stays visible (ms)
+const _AV_IMG_FADE_MS   = 600;   // fade-in/out duration (matches CSS transition)
+let   _avImgActive      = false;
+let   _avImgDismissTimer = null;
+let   _avCurrentImgSrc  = '';
+
+function _avShowImage(src) {
+  if (!src) return;
+  if (_avImgActive && _avCurrentImgSrc === src) return;
+
+  _avDismissImage(/*immediate=*/true);
+
+  const el = document.getElementById('avatar-img-display');
+  if (!el) return;
+
+  _avImgActive     = true;
+  _avCurrentImgSrc = src;
+  el.src           = src;
+
+  const charImg = document.getElementById('avatar-img');
+  if (charImg) charImg.style.opacity = '0.25';
+
+  requestAnimationFrame(() => { el.style.opacity = '1'; });
+
+  clearTimeout(_avImgDismissTimer);
+  _avImgDismissTimer = setTimeout(() => _avDismissImage(), _AV_IMG_HOLD_MS);
+}
+
+function _avDismissImage(immediate=false) {
+  if (!_avImgActive && !immediate) return;
+  clearTimeout(_avImgDismissTimer);
+  _avImgDismissTimer = null;
+  _avImgActive       = false;
+  _avCurrentImgSrc   = '';
+
+  const el = document.getElementById('avatar-img-display');
+  if (el) {
+    el.style.opacity = '0';
+    setTimeout(() => { if (!_avImgActive) { el.src = ''; } }, _AV_IMG_FADE_MS + 50);
+  }
+  const charImg = document.getElementById('avatar-img');
+  if (charImg) charImg.style.opacity = '1';
+}
+
+// ── Avatar video display ──────────────────────────────────────────────────────
+let _avVidActive       = false;
+let _avCurrentVidUrl   = '';
+let _avVidDismissTimer = null;
+const _AV_VID_HOLD_MS  = 12000;  // hold video for 12s then fade out
+
+function _avShowVideo(url) {
+  if (!url) return;
+  if (_avVidActive && _avCurrentVidUrl === url) return;
+
+  _avDismissVideo(/*immediate=*/true);
+  _avDismissImage(/*immediate=*/true);  // dismiss image if showing
+
+  const el = document.getElementById('avatar-vid-display');
+  if (!el) return;
+
+  _avVidActive     = true;
+  _avCurrentVidUrl = url;
+  el.src           = url;
+  el.currentTime   = 0;
+  el.play().catch(() => {});  // autoplay muted — should succeed
+
+  const charImg = document.getElementById('avatar-img');
+  if (charImg) charImg.style.opacity = '0.25';
+
+  requestAnimationFrame(() => { el.style.opacity = '1'; });
+
+  clearTimeout(_avVidDismissTimer);
+  _avVidDismissTimer = setTimeout(() => _avDismissVideo(), _AV_VID_HOLD_MS);
+}
+
+function _avDismissVideo(immediate=false) {
+  if (!_avVidActive && !immediate) return;
+  clearTimeout(_avVidDismissTimer);
+  _avVidDismissTimer = null;
+  _avVidActive       = false;
+  _avCurrentVidUrl   = '';
+
+  const el = document.getElementById('avatar-vid-display');
+  if (el) {
+    el.style.opacity = '0';
+    setTimeout(() => { if (!_avVidActive) { el.pause(); el.src = ''; } }, _AV_IMG_FADE_MS + 50);
+  }
+  const charImg = document.getElementById('avatar-img');
+  if (charImg) charImg.style.opacity = '1';
 }
 
 function _avIsAsciiArt(text) {
@@ -6397,6 +6905,7 @@ function _saveWaveState() {
 // ── Initiative toggle ─────────────────────────────────────────────────────────
 let _initiativeEnabled = false;
 let _initiativeMode = 'light';
+let _lastInitiativeSuppressed = false; // tracks if last initiative was suppressed (typing)
 
 function toggleInitiative() {
   _initiativeEnabled = !_initiativeEnabled;
@@ -6438,11 +6947,74 @@ document.getElementById('s-init-mode').addEventListener('change', function() {
   }
 });
 
-// ── FX chance ─────────────────────────────────────────────────────────────────
-function _saveFxChance() {
-  const val = parseInt(document.getElementById('s-fx-chance').value) || 0;
-  fetch('/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ initiative_fx_chance: val }) }).catch(() => {});
+// ── Initiative chance sliders (all 6 mutually capped at 100% combined) ────────
+const _CHANCE_KEYS = ['fx','img','video','ascii','terminal','glitch'];
+const _CHANCE_SETTING_MAP = {
+  fx:       'initiative_fx_chance',
+  img:      'initiative_img_chance',
+  video:    'initiative_video_chance',
+  ascii:    'initiative_ascii_chance',
+  terminal: 'initiative_terminal_chance',
+  glitch:   'initiative_glitch_chance',
+};
+
+function _getChanceValues() {
+  const vals = {};
+  for (const k of _CHANCE_KEYS) {
+    const sl = document.getElementById(`s-${k}-chance`);
+    vals[k] = sl ? (parseInt(sl.value) || 0) : 0;
+  }
+  return vals;
+}
+
+function _updateChanceBudget() {
+  const vals = _getChanceValues();
+  const total = Object.values(vals).reduce((a,b)=>a+b, 0);
+  const text_pct = Math.max(0, 100 - total);
+  const el = document.getElementById('s-init-budget');
+  if (el) {
+    el.textContent = `TEXT ${text_pct}% · FX ${vals.fx}% · IMG ${vals.img}% · VID ${vals.video}% · ASCII ${vals.ascii}% · TERM ${vals.terminal}% · GLITCH ${vals.glitch}%`;
+    el.style.color = total > 100 ? 'var(--accent-red, #f44)' : 'var(--text-dim)';
+  }
+}
+
+function _onChanceInput(changed_key, new_val) {
+  new_val = parseInt(new_val) || 0;
+  const vals = _getChanceValues();
+  vals[changed_key] = new_val;
+
+  // Sum of all other sliders
+  const others_sum = _CHANCE_KEYS.filter(k=>k!==changed_key).reduce((a,k)=>a+vals[k], 0);
+
+  // If total would exceed 100, clamp others proportionally
+  if (new_val + others_sum > 100) {
+    const available = Math.max(0, 100 - new_val);
+    // Reduce other sliders proportionally, smallest first
+    const other_keys = _CHANCE_KEYS.filter(k=>k!==changed_key);
+    let remaining = others_sum - available;
+    // Sort by current value descending — reduce largest first
+    other_keys.sort((a,b)=>vals[b]-vals[a]);
+    for (const k of other_keys) {
+      if (remaining <= 0) break;
+      const reduce = Math.min(vals[k], remaining);
+      vals[k] -= reduce;
+      remaining -= reduce;
+    }
+  }
+
+  // Apply clamped values back to sliders and labels
+  const payload = {};
+  for (const k of _CHANCE_KEYS) {
+    const sl = document.getElementById(`s-${k}-chance`);
+    const lbl = document.getElementById(`s-${k}-chance-val`);
+    if (sl) sl.value = vals[k];
+    if (lbl) lbl.textContent = vals[k] + '%';
+    payload[_CHANCE_SETTING_MAP[k]] = vals[k];
+  }
+
+  _updateChanceBudget();
+  fetch('/settings', { method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(payload) }).catch(()=>{});
 }
 
 function _testFxNow() {
@@ -6522,18 +7094,31 @@ function _applySleepTimerUI(enabled, inSleep) {
         if(_gData.chat_history&&_gData.chat_history.length){
           _gData.chat_history.forEach(msg=>{
             const dispText=msg.user_image?msg.content.replace(/^\[image attached\]\s*/,''):msg.content;
-            const b=addBubble(msg.role,dispText);
-            if(msg.user_image){const ui=document.createElement('img');ui.src=msg.user_image;ui.className='bubble-img';ui.style.cursor='zoom-in';ui.onclick=()=>openLightbox(ui.src);b.insertBefore(ui,b.firstChild);}
+            const b=addBubble(msg.role, dispText, msg.mood||null);
+            if(msg.user_image){const ui=document.createElement('img');ui.src=msg.user_image;ui.className='bubble-img';ui.style.cursor='zoom-in';ui.onclick=()=>openLightbox(ui);b.insertBefore(ui,b.firstChild);}
             (msg.gen_images||[]).forEach(uri=>{
               const im=document.createElement('img');im.src=uri;
               im.className='bubble-img generated-img';
               im.style.cssText='max-width:100%;max-height:360px;margin-top:8px;cursor:zoom-in';
-              im.onclick=()=>openLightbox(uri);b.appendChild(im);
+              im.onclick=()=>openLightbox(im);b.appendChild(im);
             });
+            (msg.gen_videos||[]).forEach(url=>{
+              const vid=document.createElement('video');vid.src=url;vid.muted=true;vid.autoplay=true;vid.loop=true;vid.playsinline=true;
+              vid.className='bubble-img generated-vid';
+              vid.style.cssText='max-width:100%;max-height:360px;margin-top:8px;cursor:zoom-in;display:block;border-radius:4px';
+              vid.title='Click to zoom / fullscreen';vid.onclick=()=>openLightbox(vid);b.appendChild(vid);
+            });
+            _sealBubble(b);
           });
         }
       }
       await loadState();
+      // Narrate first message if freshly injected with TTS enabled
+      if(_gData.ok && _gData.first_message_tts_pending && _gData.chat_history && _gData.chat_history.length===1 && _gData.chat_history[0].role==='assistant'){
+        const myGen=++_ttsGeneration;
+        _ttsPlayStartTime=audioCtx?audioCtx.currentTime+0.06:0;
+        playTTS(_stripCodeForTTS(_gData.chat_history[0].content),myGen).catch(()=>{});
+      }
     }
   }catch(e){ console.warn('[guest]',e); }
 })();
@@ -6564,6 +7149,46 @@ function _startChatStream(charPath){
         return;
       }
 
+      // ── Image attach — appended to the most recent assistant bubble ──
+      if(msg.type==='image_attach'){
+        if(_lastInitiativeSuppressed){ _lastInitiativeSuppressed=false; return; }
+        const bubbles=document.querySelectorAll('#chat .bubble.assistant');
+        const lastBubble=bubbles.length?bubbles[bubbles.length-1]:null;
+        if(lastBubble){
+          const img=document.createElement('img');
+          img.src=msg.uri;
+          img.className='bubble-img generated-img';
+          img.style.cssText='max-width:100%;max-height:360px;margin-top:8px;cursor:zoom-in';
+          img.onclick=()=>openLightbox(img);
+          img.dataset.persistUrl=msg.url;
+          // Insert before action bar if present, otherwise just append
+          const bar=lastBubble.querySelector('.bubble-actions');
+          if(bar) lastBubble.insertBefore(img, bar);
+          else lastBubble.appendChild(img);
+        }
+        if(msg.uri && _avOverlayOpen) _avShowImage(msg.uri);
+        return;
+      }
+
+      if(msg.type==='video_attach'){
+        if(_lastInitiativeSuppressed){ _lastInitiativeSuppressed=false; return; }
+        const bubbles=document.querySelectorAll('#chat .bubble.assistant');
+        const lastBubble=bubbles.length?bubbles[bubbles.length-1]:null;
+        if(lastBubble){
+          const vid=document.createElement('video');
+          vid.src=msg.url; vid.muted=true; vid.autoplay=true; vid.loop=true; vid.playsinline=true;
+          vid.className='bubble-img generated-vid';
+          vid.style.cssText='max-width:100%;max-height:360px;margin-top:8px;cursor:zoom-in;display:block;border-radius:4px';
+          vid.title='Click to zoom / fullscreen';
+          vid.onclick=()=>openLightbox(vid);
+          const bar=lastBubble.querySelector('.bubble-actions');
+          if(bar) lastBubble.insertBefore(vid, bar);
+          else lastBubble.appendChild(vid);
+        }
+        if(msg.url && _avOverlayOpen) _avShowVideo(msg.url);
+        return;
+      }
+
       // Boot ID — detect server restarts and reload state cleanly
       if(msg.type==='boot'){
         if(_sseBootId && _sseBootId !== msg.id){
@@ -6587,9 +7212,11 @@ function _startChatStream(charPath){
           const toAdd=msg.messages.slice(alreadyShown);
           toAdd.forEach(m=>{
             const dispText=m.user_image?m.content.replace(/^\[image attached\]\s*/,''):m.content;
-            const bubble=addBubble(m.role,dispText);
-            if(m.user_image){const ui=document.createElement('img');ui.src=m.user_image;ui.className='bubble-img';ui.style.cursor='zoom-in';ui.onclick=()=>openLightbox(ui.src);bubble.insertBefore(ui,bubble.firstChild);}
-            (m.gen_images||[]).forEach(uri=>{const im=document.createElement('img');im.src=uri;im.className='bubble-img generated-img';im.style.cssText='max-width:100%;max-height:360px;margin-top:8px;cursor:zoom-in';im.onclick=()=>openLightbox(uri);bubble.appendChild(im);});
+            const bubble=addBubble(m.role, dispText, m.mood||null);
+            if(m.user_image){const ui=document.createElement('img');ui.src=m.user_image;ui.className='bubble-img';ui.style.cursor='zoom-in';ui.onclick=()=>openLightbox(ui);bubble.insertBefore(ui,bubble.firstChild);}
+            (m.gen_images||[]).forEach(uri=>{const im=document.createElement('img');im.src=uri;im.className='bubble-img generated-img';im.style.cssText='max-width:100%;max-height:360px;margin-top:8px;cursor:zoom-in';im.onclick=()=>openLightbox(im);bubble.appendChild(im);});
+            (m.gen_videos||[]).forEach(url=>{const vid=document.createElement('video');vid.src=url;vid.muted=true;vid.autoplay=true;vid.loop=true;vid.playsinline=true;vid.className='bubble-img generated-vid';vid.style.cssText='max-width:100%;max-height:360px;margin-top:8px;cursor:zoom-in;display:block;border-radius:4px';vid.title='Click to zoom / fullscreen';vid.onclick=()=>openLightbox(vid);bubble.appendChild(vid);});
+            _sealBubble(bubble);
           });
         }
         return;
@@ -6610,14 +7237,17 @@ function _startChatStream(charPath){
       }
 
       if(msg.role==='user') addBubble('user',msg.text);
-      else addBubble('assistant',msg.text);
+      else if(!isInitiative){ const _b=addBubble('assistant',msg.text); _sealBubble(_b); }
 
-      // Initiative message — reschedule if user is typing or busy, otherwise play
+      // Initiative message — reschedule if user is typing, otherwise show and play
       if(isInitiative){
-        if(_userIsTyping()||isBusy||isPlaying){
+        if(_userIsTyping()){
           fetch('/initiative/reschedule',{method:'POST'}).catch(()=>{});
+          _lastInitiativeSuppressed = true;
           return;
         }
+        _lastInitiativeSuppressed = false;
+        const _ib=addBubble('assistant',msg.text); _sealBubble(_ib);
         isBusy=true;
         const gen=++_ttsGeneration;
         _currentReplyText=msg.text;
@@ -6625,7 +7255,7 @@ function _startChatStream(charPath){
         if(openMicState!=='off') setOpenMicState('playing');
         playTTS(_stripCodeForTTS(msg.text), gen).then(()=>{
           if(openMicState==='playing') setOpenMicState('listening');
-        }).finally(()=>{ isBusy=false; });
+        }).finally(()=>{ isBusy=false; rearmAC(); });
       }
     }catch(err){}
   };

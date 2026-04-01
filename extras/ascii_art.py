@@ -1,42 +1,28 @@
 """
 extras/ascii_art.py — ASCII art detection, extraction, and local library.
 
-The primary ASCII art rendering lives in the frontend JS (avatar code
-renderer). This module provides server-side helpers for:
-  - Detecting whether a reply is/contains ASCII art before sending
-  - Extracting fenced ASCII art blocks from LLM replies
-  - AsciiArtLibrary: load and pick from local .txt files / multi-piece files
-    so initiative/AC openers never have to ask the LLM to generate art
+Folder layout for AsciiArtLibrary:
+    ascii_art/Default/       — fallback pool used when no character pool exists
+    ascii_art/<CharName>/    — character-specific pool, e.g. ascii_art/Makima/
+                               files can be named anything (e.g. Makima-1.txt)
+
+Pick priority: character pool → Default pool → root-level .txt files → None
 """
 
 import os
 import random
 import re
 
-# Characters commonly found in ASCII art but rarely in natural prose
 _ART_CHARS = set(r'|\\/\-+=#*@^~<>[]{}')
-
-# Minimum density of art characters per line to be considered art
 _ART_DENSITY_THRESHOLD = 0.35
-
-# Minimum number of lines that must look like art
 _ART_MIN_LINES = 3
-
-# Delimiter used to separate multiple pieces inside one file
 _MULTI_PIECE_DELIM = re.compile(r'^\s*---+\s*$', re.MULTILINE)
 
 
 def is_ascii_art(text: str) -> bool:
-    """
-    Heuristic: return True if the text looks like ASCII art.
-
-    Mirrors the _avIsAsciiArt() logic in frontend.js so the server can
-    make the same determination without a round-trip.
-    """
     lines = [l for l in text.strip().splitlines() if l.strip()]
     if len(lines) < _ART_MIN_LINES:
         return False
-
     art_line_count = 0
     for line in lines:
         if not line:
@@ -44,25 +30,10 @@ def is_ascii_art(text: str) -> bool:
         art_chars = sum(1 for c in line if c in _ART_CHARS)
         if len(line) > 0 and (art_chars / len(line)) >= _ART_DENSITY_THRESHOLD:
             art_line_count += 1
-
     return art_line_count >= _ART_MIN_LINES
 
 
 def extract_fenced_art(text: str) -> str | None:
-    """
-    Extract the content of the first fenced ASCII art block.
-
-    Looks for:
-        ```
-        <art content>
-        ```
-    or:
-        ```ascii
-        <art content>
-        ```
-
-    Returns the art content (without fences) or None if not found.
-    """
     match = re.search(r'```(?:ascii)?\s*\n([\s\S]*?)```', text, re.IGNORECASE)
     if match:
         return match.group(1).strip()
@@ -70,21 +41,10 @@ def extract_fenced_art(text: str) -> str | None:
 
 
 def split_art_from_text(text: str) -> tuple[str, str | None]:
-    """
-    Split a reply into (prose, art_block).
-
-    If the reply contains a fenced art block, returns the prose before it
-    and the art content separately. Otherwise returns (text, None).
-
-    Useful for sending prose to TTS while displaying art on the avatar canvas.
-    """
     art = extract_fenced_art(text)
     if art is None:
         return text, None
-
-    # Strip the fenced block from the prose
-    prose = re.sub(r'```(?:ascii)?\s*\n[\s\S]*?```', '', text,
-                   flags=re.IGNORECASE).strip()
+    prose = re.sub(r'```(?:ascii)?\s*\n[\s\S]*?```', '', text, flags=re.IGNORECASE).strip()
     return prose, art
 
 
@@ -92,84 +52,139 @@ def split_art_from_text(text: str) -> tuple[str, str | None]:
 
 class AsciiArtLibrary:
     """
-    Load ASCII art pieces from a directory and/or multi-piece files.
+    Load ASCII art pieces from a root ascii_art/ directory.
 
-    Directory mode: each .txt file is one piece.
-    Multi-piece file: pieces separated by lines of three or more dashes (---).
+    Folder layout:
+        ascii_art/Default/       -- general fallback pieces (any .txt)
+        ascii_art/<CharName>/    -- character-specific pieces, e.g. ascii_art/Makima/
+                                    files may be named anything (Makima-1.txt etc.)
 
-    Usage:
-        lib = AsciiArtLibrary()
-        lib.load('/app/ascii_art')          # directory of .txt files
-        lib.load('/app/ascii_art/pack.txt') # single multi-piece file
-        art = lib.pick()                    # random piece, or None if empty
+    Single file paths are still supported for backwards compat.
+    Multi-piece files: pieces separated by lines of 3+ dashes (---).
+
+    pick(char_name)        -- char pool first; falls back to Default; then general
+    pick_fenced(char_name) -- same, wrapped in ``` fences
     """
 
     def __init__(self):
-        self._pieces: list[str] = []
-        self._last_index: int = -1
+        self._root: str = ""
+        self._char_cache: dict[str, list[str]] = {}   # lower-case name -> pieces
+        self._default: list[str] = []                  # ascii_art/Default/
+        self._general: list[str] = []                  # root-level .txt files
+        self._last: dict[str, int] = {}                # repeat-avoidance per pool
 
-    # ── loading ──────────────────────────────────────────────────────────────
+    # ── loading ───────────────────────────────────────────────────────────────
 
     def load(self, path: str) -> int:
-        """
-        Load art from a file or directory.  Returns number of new pieces added.
-        Silently skips if path doesn't exist so the app starts cleanly with no
-        art files present.
-        """
         if not path or not os.path.exists(path):
             return 0
         if os.path.isdir(path):
-            return self._load_dir(path)
-        return self._load_file(path)
+            return self._load_root(path)
+        return self._load_file_into(path, self._general)
 
-    def _load_dir(self, dirpath: str) -> int:
-        added = 0
-        for root, _dirs, files in os.walk(dirpath):
-            for fname in sorted(files):
-                if fname.lower().endswith('.txt'):
-                    added += self._load_file(os.path.join(root, fname))
-        return added
+    def _load_root(self, dirpath: str) -> int:
+        self._root = dirpath
+        self._char_cache.clear()
+        self._default.clear()
+        self._general.clear()
+        self._last.clear()
+        total = 0
+        for entry in sorted(os.listdir(dirpath)):
+            full = os.path.join(dirpath, entry)
+            if os.path.isdir(full):
+                pool: list[str] = []
+                for fname in sorted(os.listdir(full)):
+                    if fname.lower().endswith('.txt'):
+                        total += self._load_file_into(os.path.join(full, fname), pool)
+                if pool:
+                    key = entry.lower()
+                    if key == 'default':
+                        self._default = pool
+                        print(f"[ASCII ART] Default pool — {len(pool)} piece(s)")
+                    else:
+                        self._char_cache[key] = pool
+                        print(f"[ASCII ART] '{entry}' pool — {len(pool)} piece(s)")
+            elif entry.lower().endswith('.txt'):
+                total += self._load_file_into(full, self._general)
+        char_summary = ", ".join(f"'{k}' {len(v)}" for k, v in self._char_cache.items())
+        print(f"[ASCII ART] Ready — {total} total | "
+              f"default={len(self._default)} general={len(self._general)}"
+              + (f" | {char_summary}" if char_summary else ""))
+        return total
 
-    def _load_file(self, filepath: str) -> int:
+    def _load_file_into(self, filepath: str, pool: list) -> int:
         try:
             with open(filepath, encoding='utf-8') as f:
                 raw = f.read()
         except Exception as e:
             print(f"[ASCII ART] Failed to read {filepath}: {e}")
             return 0
-
         pieces = [p.strip() for p in _MULTI_PIECE_DELIM.split(raw)]
-        pieces = [p for p in pieces if p]  # drop empty
-        self._pieces.extend(pieces)
+        pieces = [p for p in pieces if p]
+        pool.extend(pieces)
         print(f"[ASCII ART] Loaded {len(pieces)} piece(s) from {os.path.basename(filepath)}")
         return len(pieces)
 
-    def reload(self, path: str) -> int:
-        """Clear and reload from path."""
-        self._pieces.clear()
-        self._last_index = -1
-        return self.load(path)
+    def reload(self, path: str = "") -> int:
+        """Clear and reload. Uses stored root if path omitted."""
+        return self.load(path or self._root)
 
-    # ── picking ──────────────────────────────────────────────────────────────
+    def reload_char(self, char_name: str) -> int:
+        """Reload only one character's subfolder (e.g. after adding new files)."""
+        if not self._root or not char_name:
+            return 0
+        key = char_name.lower()
+        subdir = ""
+        for entry in os.listdir(self._root):
+            if entry.lower() == key and os.path.isdir(os.path.join(self._root, entry)):
+                subdir = os.path.join(self._root, entry)
+                break
+        pool: list[str] = []
+        if subdir:
+            for fname in sorted(os.listdir(subdir)):
+                if fname.lower().endswith('.txt'):
+                    self._load_file_into(os.path.join(subdir, fname), pool)
+        if key == 'default':
+            self._default = pool
+        else:
+            self._char_cache[key] = pool
+        self._last.pop(key, None)
+        return len(pool)
+
+    # ── picking ───────────────────────────────────────────────────────────────
 
     @property
     def count(self) -> int:
-        return len(self._pieces)
+        return (len(self._general) + len(self._default)
+                + sum(len(v) for v in self._char_cache.values()))
 
-    def pick(self) -> str | None:
-        """Return a random piece, avoiding immediate repeats. None if library empty."""
-        if not self._pieces:
+    def _pick_from(self, pool: list[str], pool_key: str) -> str | None:
+        if not pool:
             return None
-        if len(self._pieces) == 1:
-            return self._pieces[0]
-        candidates = [i for i in range(len(self._pieces)) if i != self._last_index]
+        if len(pool) == 1:
+            return pool[0]
+        last = self._last.get(pool_key, -1)
+        candidates = [i for i in range(len(pool)) if i != last]
         idx = random.choice(candidates)
-        self._last_index = idx
-        return self._pieces[idx]
+        self._last[pool_key] = idx
+        return pool[idx]
 
-    def pick_fenced(self) -> str | None:
-        """Return a random piece wrapped in ```ascii fences, or None if empty."""
-        art = self.pick()
+    def pick(self, char_name: str = "") -> str | None:
+        """Priority: character pool -> Default pool -> general root files -> None."""
+        if char_name:
+            key = char_name.lower()
+            pool = self._char_cache.get(key)
+            if pool:
+                return self._pick_from(pool, key)
+        if self._default:
+            return self._pick_from(self._default, "default")
+        if self._general:
+            return self._pick_from(self._general, "general")
+        return None
+
+    def pick_fenced(self, char_name: str = "") -> str | None:
+        """Return a random piece wrapped in ``` fences, or None if empty."""
+        art = self.pick(char_name)
         if art is None:
             return None
         return f"```\n{art}\n```"
